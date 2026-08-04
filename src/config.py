@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 PROMPTS_DIR = DATA_DIR / "prompts"
 BASELINES_DIR = DATA_DIR / "baselines"

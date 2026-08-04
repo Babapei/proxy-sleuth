@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ======== 开发日志和笔记（不提交）========
+notes/
+*.log
+progress*.md
+session*.md
+dev-notes*.md
+TODO*.md
+
+# Baseline 数据（运行时采集，体积大）
+data/baselines/*.pkl
+data/baselines/*.json
+!data/baselines/.gitkeep
+
+# API keys and secrets
+.env
+*.secret
+secrets/
+
+# Test outputs
+.pytest_cache/
+htmlcov/
+coverage.xml
+.coverage

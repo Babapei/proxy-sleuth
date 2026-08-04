@@ -84,33 +84,36 @@ def _db_path() -> Path:
 
 
 def _read_providers(conn: sqlite3.Connection) -> list[Provider]:
-    """Extract custom (non-official) providers from the database."""
+    """Extract custom (non-official) providers from the database.
+
+    Supports both Codex (OpenAI-format) and Claude (Anthropic-format) providers.
+    """
     cur = conn.execute(
-        "SELECT id, name, settings_config, is_current, meta "
+        "SELECT id, app_type, name, settings_config, is_current, meta "
         "FROM providers "
-        "WHERE app_type = 'codex' "
+        "WHERE (app_type IN ('codex', 'claude')) "
         "  AND (category IN ('custom', 'third_party') OR category IS NULL)"
     )
     providers: list[Provider] = []
 
     for row in cur.fetchall():
-        pid, name, config_json, is_current, meta_json = row
+        pid, app_type, name, config_json, is_current, meta_json = row
 
-        config = json.loads(config_json)
+        config = json.loads(config_json) if config_json else {}
         meta = json.loads(meta_json) if meta_json else {}
 
-        # Extract API key
-        api_key = config.get("auth", {}).get("OPENAI_API_KEY", "")
+        if app_type == "codex":
+            api_key = config.get("auth", {}).get("OPENAI_API_KEY", "")
+            base_url = _extract_base_url(config.get("config", ""))
+            protocol = "openai"
+        elif app_type == "claude":
+            env = config.get("env", {})
+            api_key = env.get("ANTHROPIC_AUTH_TOKEN", "")
+            base_url = env.get("ANTHROPIC_BASE_URL", "")
+            protocol = "anthropic"
+        else:
+            continue
 
-        # Extract base_url from TOML config
-        toml = config.get("config", "")
-        base_url = _extract_base_url(toml)
-
-        # Protocol detection
-        api_format = meta.get("apiFormat", "openai_responses")
-        protocol = "openai"
-
-        # Get endpoints
         endpoints = _read_endpoints(conn, pid)
 
         providers.append(Provider(

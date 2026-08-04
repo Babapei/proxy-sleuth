@@ -181,15 +181,30 @@ async def _run_detection(cfg: RunConfig) -> None:
 
     # ── Layer 4: Statistical fingerprint ──
     if cfg.run_statistical:
-        click.echo("[fingerprint] Statistical fingerprinting not yet implemented (Phase 3).")
+        from src.detectors.statistical import StatisticalFingerprinter
+        click.echo("[fingerprint] Running statistical fingerprint (single-token distributions)...")
+        fingerprinter = StatisticalFingerprinter(cfg)
+        r = await fingerprinter.run()
+        scorer.add_from_result("statistical", r, WEIGHTS["statistical"])
+        results.append(r)
 
     # ── Layer 5: Capability benchmark ──
     if cfg.run_capability:
-        click.echo("[capability] Capability benchmarks not yet implemented (Phase 4).")
+        from src.detectors.capability import CapabilityDetector
+        click.echo("[capability] Running reasoning/coding/math/Chinese benchmarks...")
+        detector = CapabilityDetector(cfg)
+        r = await detector.run()
+        scorer.add_from_result("capability", r, WEIGHTS["capability"])
+        results.append(r)
 
     # ── Layer 6: Mixed routing ──
     if cfg.run_mixed_routing:
-        click.echo("[routing] Mixed routing detection not yet implemented (Phase 4).")
+        from src.detectors.mixed_routing import MixedRoutingDetector
+        click.echo("[routing] Testing for mixed model routing...")
+        detector = MixedRoutingDetector(cfg)
+        r = await detector.run()
+        scorer.add_from_result("mixed_routing", r, WEIGHTS["mixed_routing"])
+        results.append(r)
 
     if not results:
         click.echo("No detection layers enabled for this mode.")

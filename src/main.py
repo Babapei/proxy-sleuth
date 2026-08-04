@@ -23,9 +23,9 @@ def cli() -> None:
 
 
 @cli.command()
-@click.option("--endpoint", "-e", required=True, help="API endpoint URL (e.g. https://proxy.example.com/v1)")
+@click.option("--endpoint", "-e", help="API endpoint URL (required unless --providers)")
 @click.option("--api-key", "-k", envvar="PROXY_SLEUTH_KEY", help="API key (or set PROXY_SLEUTH_KEY env var)")
-@click.option("--model", "-m", required=True, help="Claimed model name (e.g. gpt-5.6-sol, claude-fable-5)")
+@click.option("--model", "-m", help="Claimed model name (required unless --providers)")
 @click.option("--protocol", "-p", type=click.Choice(["openai", "anthropic"]), default="openai", help="API protocol")
 @click.option("--mode", type=click.Choice(["quick", "standard", "full", "knowledge", "params", "context", "routing"]), default="quick", help="Detection mode")
 @click.option("--output", "-o", "output_format", type=click.Choice(["term", "json", "html"]), default="term", help="Output format")
@@ -33,10 +33,11 @@ def cli() -> None:
 @click.option("--timeout", type=float, default=120.0, help="Request timeout in seconds")
 @click.option("--temperature", type=float, default=0.0, help="Sampling temperature for probes")
 @click.option("--max-tokens", type=int, default=1024, help="Max tokens for probe responses")
+@click.option("--providers", "providers_file", help="Path to providers.json (ccswitch-compatible config) for batch testing")
 def detect(
-    endpoint: str,
+    endpoint: Optional[str],
     api_key: Optional[str],
-    model: str,
+    model: Optional[str],
     protocol: str,
     mode: str,
     output_format: str,
@@ -44,8 +45,26 @@ def detect(
     timeout: float,
     temperature: float,
     max_tokens: int,
+    providers_file: Optional[str],
 ) -> None:
-    """Run model authenticity detection against an API endpoint."""
+    """Run model authenticity detection against an API endpoint, or batch-test providers.
+
+    Single endpoint:
+      proxy-sleuth detect -e https://proxy.example.com/v1 -m gpt-5.6-sol -k sk-xxx
+
+    Batch test multiple providers from a cccswitch-compatible config:
+      proxy-sleuth detect --providers providers.json --mode quick
+    """
+    # Batch mode: test all providers from config
+    if providers_file:
+        _run_batch(providers_file, mode, output_format, timeout, temperature, max_tokens)
+        return
+
+    # Single endpoint mode
+    if not endpoint:
+        raise click.UsageError("--endpoint is required (or use --providers for batch mode)")
+    if not model:
+        raise click.UsageError("--model is required (or use --providers for batch mode)")
     if not api_key:
         click.echo("Error: No API key provided. Use --api-key or set PROXY_SLEUTH_KEY env var.", err=True)
         sys.exit(1)
@@ -62,7 +81,6 @@ def detect(
         output_file=output_file,
     )
 
-    # Apply mode presets
     _apply_mode_preset(cfg, mode)
 
     click.echo(f"proxy-sleuth v0.1.0 — investigating {endpoint}")
@@ -94,6 +112,42 @@ def baseline_list() -> None:
     """List available baseline fingerprints."""
     click.echo("Available baselines:")
     click.echo("  (No baselines collected yet. Run 'proxy-sleuth baseline collect' first.)")
+
+
+@cli.group()
+def cccswitch() -> None:
+    """Manage cccswitch-compatible provider configs."""
+
+
+@cccswitch.command("init")
+@click.option("--output", "-o", default="./providers.json", help="Output path for template config")
+def cccswitch_init(output: str) -> None:
+    """Generate a template providers.json for cccswitch integration."""
+    from src.utils.ccswitch import CCSwitchLoader
+    path = CCSwitchLoader.init_template(output)
+    click.echo(f"Template created: {path}")
+    click.echo("  Edit this file to add your proxy endpoints, then run:")
+    click.echo(f"  proxy-sleuth detect --providers {path} --mode quick")
+
+
+@cccswitch.command("test")
+@click.option("--providers", "-f", default=None, help="Path to providers.json (auto-discovered if omitted)")
+@click.option("--mode", default="quick", type=click.Choice(["quick", "standard", "full"]), help="Detection mode")
+@click.option("--output", "-o", "output_format", type=click.Choice(["term", "json"]), default="term")
+def cccswitch_test(providers: Optional[str], mode: str, output_format: str) -> None:
+    """Batch-test all providers from a cccswitch config."""
+    from src.utils.ccswitch import CCSwitchLoader
+
+    try:
+        path = providers if providers else None
+        config = CCSwitchLoader.load(path)
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        click.echo("Run 'proxy-sleuth cccswitch init' to create a template.", err=True)
+        sys.exit(1)
+
+    click.echo(f"Loaded {len(config.providers)} provider(s) from {path or 'auto-discovered'}")
+    _run_batch_from_config(config, mode, output_format)
 
 
 def _apply_mode_preset(cfg: RunConfig, mode: str) -> None:
@@ -229,6 +283,68 @@ def _render_result(result, cfg: RunConfig) -> None:
         from src.analyzers.reporter import TerminalReporter
         reporter = TerminalReporter()
         reporter.render(result)
+
+
+# ── batch mode (ccswitch integration) ──────────────────────────
+
+def _run_batch(providers_file: str, mode: str, output_format: str, timeout: float, temperature: float, max_tokens: int) -> None:
+    """Load providers from file and batch-test each one."""
+    from src.utils.ccswitch import CCSwitchLoader
+
+    try:
+        config = CCSwitchLoader.load(providers_file)
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"proxy-sleuth v0.1.0 — batch mode ({len(config.providers)} providers)")
+    click.echo(f"  Mode: {mode}")
+    click.echo()
+
+    _run_batch_from_config(config, mode, output_format, timeout=timeout, temperature=temperature, max_tokens=max_tokens)
+
+
+def _run_batch_from_config(config, mode: str, output_format: str, **kwargs) -> None:
+    """Run detection on all providers in a CCSwitchConfig."""
+    results = []
+
+    async def _batch():
+        for provider in config.providers:
+            if not provider.api_key:
+                click.echo(f"[{provider.name}] SKIP — no API key configured")
+                continue
+
+            click.echo(f"\n{'='*60}")
+            click.echo(f"[{provider.name}] Testing {provider.base_url}")
+            click.echo(f"  Models: {', '.join(provider.models)}")
+            click.echo(f"{'='*60}")
+
+            for model in provider.models:
+                cfg = RunConfig(
+                    endpoint=provider.base_url.rstrip("/"),
+                    api_key=provider.api_key,
+                    model=model,
+                    protocol=provider.protocol,
+                    timeout=kwargs.get("timeout", 120.0),
+                    temperature=kwargs.get("temperature", 0.0),
+                    max_tokens=kwargs.get("max_tokens", 1024),
+                    output_format=output_format,
+                )
+                _apply_mode_preset(cfg, mode)
+                r = await _run_detection(cfg)
+                results.append({"provider": provider.name, "model": model, **r})
+
+        # Summary table
+        click.echo(f"\n{'='*60}")
+        click.echo("BATCH SUMMARY")
+        click.echo(f"{'='*60}")
+        for r in results:
+            verdict = r.get("verdict", "?")
+            color = "green" if verdict == "MATCH" else ("red" if verdict == "MISMATCH" else "yellow")
+            score = r.get("overall_score", 0)
+            click.echo(f"  [{color}]{verdict:12}[/{color}] {r['provider']:20s} {r['model']:20s} ({score:.0%})")
+
+    asyncio.run(_batch())
 
 
 if __name__ == "__main__":

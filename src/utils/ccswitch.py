@@ -1,24 +1,24 @@
-"""CCSwitch integration — reads cccswitch-managed Claude Code / Codex configs.
+"""CC Switch integration — reads provider configs from ~/.cc-switch/cc-switch.db.
 
-ccswitch works by modifying ~/.claude/settings.json (and similar files
-for Codex) to point to different API endpoints and keys. This module
-directly reads the current active config and any cached provider profiles.
+CC Switch stores all provider configs in a SQLite database:
+  ~/.cc-switch/cc-switch.db
+  - providers: each provider's name, API key, TOML config, endpoint
+  - provider_endpoints: backup/multiple endpoint URLs per provider
+  - proxy_config: local proxy settings (port, timeouts, failover)
+  - settings.json: current active provider ID
 
-Supported config sources:
-  - ~/.claude/settings.json        (Claude Code, Anthropic format)
-  - ~/.codex/config.json           (Codex CLI, OpenAI format)
-  - ~/.claude/.ccswitch_providers  (ccswitch CLI provider cache)
+The CC Switch runs a local proxy on 127.0.0.1:PORT (default 15721)
+that routes to the selected provider with automatic failover.
 """
 
 from __future__ import annotations
 
 import json
-import os
+import re
+import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-from src.config import RunConfig
 
 
 @dataclass
@@ -28,179 +28,126 @@ class Provider:
     api_key: str
     models: list[str] = field(default_factory=list)
     protocol: str = "openai"
-    source: str = ""  # Which file it came from
+    provider_id: str = ""
+    is_current: bool = False
+    endpoints: list[str] = field(default_factory=list)
+    source: str = "cc-switch.db"
 
+
+# ── public API ────────────────────────────────────────────────────
 
 def discover_providers() -> list[Provider]:
-    """Auto-discover all API providers from cccswitch-managed configs.
+    """Read all non-official providers from CC Switch database."""
+    db_path = _db_path()
+    if not db_path.exists():
+        return []
 
-    Searches:
-    1. ~/.claude/settings.json — current active provider
-    2. ~/.codex/config.json — Codex CLI config
-    3. Known ccswitch proxy scripts
-    """
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return _read_providers(conn)
+    finally:
+        conn.close()
+
+
+def get_current_provider() -> Provider | None:
+    """Get the currently active provider from CC Switch database."""
+    providers = discover_providers()
+    for p in providers:
+        if p.is_current:
+            return p
+    return providers[0] if providers else None
+
+
+def get_proxy_port() -> int | None:
+    """Get the CC Switch local proxy port from the database."""
+    db_path = _db_path()
+    if not db_path.exists():
+        return None
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.execute(
+            "SELECT listen_port FROM proxy_config WHERE app_type='codex' AND enabled=1"
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+# ── internal ───────────────────────────────────────────────────────
+
+def _db_path() -> Path:
+    return Path.home() / ".cc-switch" / "cc-switch.db"
+
+
+def _read_providers(conn: sqlite3.Connection) -> list[Provider]:
+    """Extract custom (non-official) providers from the database."""
+    cur = conn.execute(
+        "SELECT id, name, settings_config, is_current, meta "
+        "FROM providers "
+        "WHERE app_type = 'codex' "
+        "  AND (category IN ('custom', 'third_party') OR category IS NULL)"
+    )
     providers: list[Provider] = []
 
-    # 1. Claude Code settings (ccswitch primary target)
-    claude_settings = Path.home() / ".claude" / "settings.json"
-    if claude_settings.exists():
-        p = _parse_claude_settings(claude_settings)
-        if p:
-            providers.append(p)
+    for row in cur.fetchall():
+        pid, name, config_json, is_current, meta_json = row
 
-    # 2. Codex CLI config
-    for codex_path in [
-        Path.home() / ".codex" / "config.toml",
-        Path.home() / ".codex" / "config.json",
-    ]:
-        if codex_path.exists():
-            p = _parse_codex_config(codex_path)
-            if p:
-                providers.append(p)
+        config = json.loads(config_json)
+        meta = json.loads(meta_json) if meta_json else {}
 
-    # 3. ccswitch proxy scripts (local proxy mode)
-    proxy_script = Path.home() / "script" / "ccproxy.js"
-    if proxy_script.exists():
-        p = _parse_ccproxy(proxy_script)
-        if p:
-            providers.append(p)
+        # Extract API key
+        api_key = config.get("auth", {}).get("OPENAI_API_KEY", "")
+
+        # Extract base_url from TOML config
+        toml = config.get("config", "")
+        base_url = _extract_base_url(toml)
+
+        # Protocol detection
+        api_format = meta.get("apiFormat", "openai_responses")
+        protocol = "openai"
+
+        # Get endpoints
+        endpoints = _read_endpoints(conn, pid)
+
+        providers.append(Provider(
+            name=name,
+            base_url=base_url or (endpoints[0] if endpoints else ""),
+            api_key=api_key,
+            protocol=protocol,
+            provider_id=pid,
+            is_current=bool(is_current),
+            endpoints=endpoints,
+            source=str(_db_path()),
+        ))
 
     return providers
 
 
-def get_current_provider() -> Provider | None:
-    """Get the currently active ccswitch provider (what Claude Code is using right now)."""
-    settings = Path.home() / ".claude" / "settings.json"
-    if not settings.exists():
-        return None
-    return _parse_claude_settings(settings)
-
-
-def _parse_claude_settings(path: Path) -> Provider | None:
-    """Parse ~/.claude/settings.json written by ccswitch."""
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-
-    env = data.get("env", {})
-    base_url = env.get("ANTHROPIC_BASE_URL", "")
-    api_key = env.get("ANTHROPIC_AUTH_TOKEN", "")
-    model = env.get("ANTHROPIC_MODEL", data.get("model", ""))
-
-    if not base_url:
-        return None
-
-    # Detect localhost proxy vs direct endpoint
-    is_proxy = "localhost" in base_url or "127.0.0.1" in base_url
-
-    models = [model] if model else []
-    available = data.get("availableModels", [])
-    if available:
-        models = available
-
-    return Provider(
-        name=f"claude-code-{'proxy' if is_proxy else 'direct'}",
-        base_url=base_url,
-        api_key=api_key,
-        models=models,
-        protocol="anthropic" if not base_url.endswith("/v1") else "openai",
-        source=str(path),
+def _read_endpoints(conn: sqlite3.Connection, provider_id: str) -> list[str]:
+    cur = conn.execute(
+        "SELECT url FROM provider_endpoints WHERE provider_id = ?", (provider_id,)
     )
+    return [row[0] for row in cur.fetchall()]
 
 
-def _parse_codex_config(path: Path) -> Provider | None:
-    """Parse Codex CLI config."""
-    try:
-        if path.suffix == ".toml":
-            return _parse_toml_codex(path)
-        with open(path) as f:
-            data = json.load(f)
-    except Exception:
-        return None
+def _extract_base_url(toml: str) -> str:
+    """Extract base_url from CC Switch's stored TOML config block.
 
-    base_url = data.get("api_base_url", data.get("base_url", ""))
-    api_key = data.get("api_key", "")
-    model = data.get("model", data.get("default_model", ""))
-
-    if not base_url and not api_key:
-        return None
-
-    return Provider(
-        name="codex-cli",
-        base_url=base_url or "https://api.openai.com/v1",
-        api_key=api_key,
-        models=[model] if model else ["gpt-5.6-sol"],
-        protocol="openai",
-        source=str(path),
-    )
-
-
-def _parse_toml_codex(path: Path) -> Provider | None:
-    """Minimal TOML parser for Codex config — only extracts what we need."""
-    try:
-        content = path.read_text()
-    except OSError:
-        return None
-
-    base_url = ""
-    api_key = ""
-    model = ""
-
-    for line in content.split("\n"):
-        line = line.strip()
-        if "=" not in line or line.startswith("#"):
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        if key == "api_base_url":
-            base_url = val
-        elif key == "api_key":
-            api_key = val
-        elif key == "model" or key == "default_model":
-            model = val
-
-    if not base_url and not api_key:
-        return None
-
-    return Provider(
-        name="codex-cli",
-        base_url=base_url or "https://api.openai.com/v1",
-        api_key=api_key,
-        models=[model] if model else ["gpt-5.6-sol"],
-        protocol="openai",
-        source=str(path),
-    )
-
-
-def _parse_ccproxy(path: Path) -> Provider | None:
-    """Extract provider info from ccswitch proxy script.
-
-    The ccproxy.js routes to different backends. We extract the
-    current active backend by reading the proxy's status.
+    Format example:
+        [model_providers.codex]
+        base_url = "https://lingsuan.top"
     """
-    # Proxy mode uses localhost — read which backend is currently active
-    settings = Path.home() / ".claude" / "settings.json"
-    if settings.exists():
-        try:
-            with open(settings) as f:
-                data = json.load(f)
-        except Exception:
-            return None
+    match = re.search(r'base_url\s*=\s*"([^"]+)"', toml)
+    if match:
+        return match.group(1)
 
-        env = data.get("env", {})
-        base_url = env.get("ANTHROPIC_BASE_URL", "")
+    # Try without quotes
+    match = re.search(r'base_url\s*=\s*(\S+)', toml)
+    if match:
+        return match.group(1).strip('"')
 
-        if "localhost" in base_url or "127.0.0.1" in base_url:
-            return Provider(
-                name="ccswitch-proxy-local",
-                base_url=base_url,
-                api_key=env.get("ANTHROPIC_AUTH_TOKEN", "proxy-mode-local"),
-                models=data.get("availableModels", ["unknown"]),
-                protocol="anthropic",
-                source=str(path),
-            )
-
-    return None
+    return ""

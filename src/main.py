@@ -127,17 +127,78 @@ def _active_layers(cfg: RunConfig) -> list[str]:
 
 
 async def _run_detection(cfg: RunConfig) -> None:
-    """Orchestrate the detection pipeline."""
-    # TODO: Phase 1 — knowledge probes only for now
-    # Future phases will add the other layers
+    """Orchestrate the detection pipeline — run all active layers."""
+    from src.analyzers.scorer import Scorer
+    scorer = Scorer()
+    results: list[dict] = []
 
+    # Layer weights (from DESIGN.md)
+    WEIGHTS = {
+        "param_integrity": 0.05,
+        "context_truncation": 0.10,
+        "api_features": 0.10,
+        "knowledge_probes": 0.25,
+        "statistical": 0.20,
+        "capability": 0.20,
+        "mixed_routing": 0.10,
+    }
+
+    # ── Layer 0: Parameter integrity ──
+    if cfg.run_params_integrity:
+        from src.detectors.param_integrity import ParamIntegrityDetector
+        click.echo("[param-integrity] Checking request parameter tampering...")
+        detector = ParamIntegrityDetector(cfg)
+        r = await detector.run()
+        scorer.add_from_result("param_integrity", r, WEIGHTS["param_integrity"])
+        results.append(r)
+
+    # ── Layer 1: Context truncation ──
+    if cfg.run_context_truncation:
+        from src.detectors.context_truncation import ContextTruncationDetector
+        click.echo("[context] Running Needle-in-Haystack tests...")
+        detector = ContextTruncationDetector(cfg)
+        r = await detector.run()
+        scorer.add_from_result("context_truncation", r, WEIGHTS["context_truncation"])
+        results.append(r)
+
+    # ── Layer 2: API features ──
+    if cfg.run_api_features:
+        from src.detectors.api_features import APIFeaturesDetector
+        click.echo("[api-features] Probing API-level characteristics...")
+        detector = APIFeaturesDetector(cfg)
+        r = await detector.run()
+        scorer.add_from_result("api_features", r, WEIGHTS["api_features"])
+        results.append(r)
+
+    # ── Layer 3: Knowledge probes ──
     if cfg.run_knowledge_probes:
         from src.detectors.knowledge_probes import KnowledgeProbeEngine
+        click.echo("[knowledge] Running knowledge boundary probes...")
         engine = KnowledgeProbeEngine(cfg)
-        result = await engine.run()
-        _render_result(result, cfg)
-    else:
+        r = await engine.run()
+        scorer.add_from_result("knowledge_probes", r, WEIGHTS["knowledge_probes"])
+        results.append(r)
+
+    # ── Layer 4: Statistical fingerprint ──
+    if cfg.run_statistical:
+        click.echo("[fingerprint] Statistical fingerprinting not yet implemented (Phase 3).")
+
+    # ── Layer 5: Capability benchmark ──
+    if cfg.run_capability:
+        click.echo("[capability] Capability benchmarks not yet implemented (Phase 4).")
+
+    # ── Layer 6: Mixed routing ──
+    if cfg.run_mixed_routing:
+        click.echo("[routing] Mixed routing detection not yet implemented (Phase 4).")
+
+    if not results:
         click.echo("No detection layers enabled for this mode.")
+        return
+
+    # ── Final score ──
+    final = scorer.finalize()
+    final["layers"] = results
+    _render_result(final, cfg)
 
 
 def _render_result(result, cfg: RunConfig) -> None:

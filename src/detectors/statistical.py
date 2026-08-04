@@ -78,12 +78,21 @@ class StatisticalFingerprinter:
 
     async def _fp(self, *args: str) -> tuple[int, str, str]:
         env = {**os.environ, "LLM_FINGERPRINT_KEY": self.cfg.resolve_api_key()}
-        if FP_BIN.exists():
-            cmd = ["node", str(FP_BIN), *args]
-        else:
-            cmd = ["npx", "llm-fingerprint", *args]
-        p = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
-                                                   stderr=asyncio.subprocess.PIPE, env=env)
+        # Prefer global npm install (maintained, updatable), fall back to vendored copy
+        if shutil.which("npx"):
+            try:
+                p = await asyncio.create_subprocess_exec("npx", "llm-fingerprint", *args,
+                                                          stdout=asyncio.subprocess.PIPE,
+                                                          stderr=asyncio.subprocess.PIPE, env=env)
+                out, err = await asyncio.wait_for(p.communicate(), timeout=self.cfg.timeout + 120)
+                if p.returncode == 0:
+                    return p.returncode, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
+            except Exception:
+                pass  # fall through to vendor
+        # Vendored fallback
+        p = await asyncio.create_subprocess_exec("node", str(FP_BIN), *args,
+                                                  stdout=asyncio.subprocess.PIPE,
+                                                  stderr=asyncio.subprocess.PIPE, env=env)
         out, err = await asyncio.wait_for(p.communicate(), timeout=self.cfg.timeout + 120)
         return p.returncode, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
 
@@ -94,16 +103,18 @@ class StatisticalFingerprinter:
             self._node = shutil.which("node") is not None
         if not self._node:
             self._ready = False; return False
-        if FP_BIN.exists():
-            self._ready = True; return True
-        try:
-            p = await asyncio.create_subprocess_exec("npx", "llm-fingerprint", "--help",
-                                                      stdout=asyncio.subprocess.DEVNULL,
-                                                      stderr=asyncio.subprocess.DEVNULL)
-            await asyncio.wait_for(p.communicate(), timeout=10)
-            self._ready = p.returncode == 0
-        except Exception:
-            self._ready = False
+        # Global npm install preferred; vendor is sufficient fallback
+        if shutil.which("npx"):
+            try:
+                p = await asyncio.create_subprocess_exec("npx", "llm-fingerprint", "--help",
+                                                          stdout=asyncio.subprocess.DEVNULL,
+                                                          stderr=asyncio.subprocess.DEVNULL)
+                await asyncio.wait_for(p.communicate(), timeout=10)
+                if p.returncode == 0:
+                    self._ready = True; return True
+            except Exception:
+                pass
+        self._ready = FP_BIN.exists()
         return self._ready
 
     def _score(self, verdict: str, jsd: float | None) -> float:

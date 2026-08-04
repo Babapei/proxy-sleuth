@@ -1,0 +1,73 @@
+{
+  "name": "llm-fingerprint",
+  "version": "0.4.0",
+  "private": false,
+  "type": "module",
+  "description": "Identify LLMs by behavioral fingerprint — send simple questions, match answer distributions against 176+ models using Jensen-Shannon Divergence (AUC 0.97)",
+  "keywords": [
+    "llm",
+    "fingerprint",
+    "model-identification",
+    "jsd",
+    "ai-security",
+    "model-audit",
+    "openrouter"
+  ],
+  "license": "MIT",
+  "author": "dreamor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dreamor/llm-fingerprint.git"
+  },
+  "homepage": "https://github.com/dreamor/llm-fingerprint#readme",
+  "bugs": {
+    "url": "https://github.com/dreamor/llm-fingerprint/issues"
+  },
+  "bin": {
+    "fp": "bin/fp.js"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./probe": "./lib/probe.js",
+    "./match": "./lib/match.js",
+    "./db": "./lib/db.js",
+    "./jsd": "./lib/jsd.js",
+    "./tasks": "./lib/tasks.js",
+    "./verdict": "./lib/verdict.js",
+    "./providers/*": "./lib/providers/*.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "results/distributions.json",
+    "results/classification.json",
+    "results/clustering.json",
+    "results/verification.json",
+    "results/pilot-report.md",
+    "data/README.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "bootstrap": "node bin/fp.js bootstrap results/distributions.json",
+    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6"
+  }
+}

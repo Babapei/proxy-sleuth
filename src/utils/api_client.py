@@ -22,6 +22,14 @@ class TokenUsage:
     completion_tokens: int = 0
     total_tokens: int = 0
 
+    @classmethod
+    def from_dict(cls, data: dict) -> TokenUsage:
+        return cls(
+            prompt_tokens=data.get("prompt_tokens", 0),
+            completion_tokens=data.get("completion_tokens", 0),
+            total_tokens=data.get("total_tokens", 0),
+        )
+
 
 @dataclass
 class ChatResponse:
@@ -147,7 +155,7 @@ class APIClient:
                         content=choice["message"].get("content") or "",
                         model=data.get("model", body["model"]),
                         finish_reason=choice.get("finish_reason", "stop"),
-                        usage=TokenUsage(**data.get("usage", {})),
+                        usage=TokenUsage.from_dict(data.get("usage", {})),
                         raw=data,
                         duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
                     )
@@ -179,7 +187,7 @@ class APIClient:
                             yield StreamChunk(
                                 content=choice.get("delta", {}).get("content") or "",
                                 finish_reason=choice.get("finish_reason"),
-                                usage=TokenUsage(**chunk_data.get("usage", {})) if chunk_data.get("usage") else None,
+                                usage=TokenUsage.from_dict(chunk_data.get("usage", {})) if chunk_data.get("usage") else None,
                             )
                 return
             except (httpx.TimeoutException, httpx.ConnectError):

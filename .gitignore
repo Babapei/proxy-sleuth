@@ -48,4 +48,3 @@ secrets/
 htmlcov/
 coverage.xml
 .coverage
-vendor/fingerprint/results/distributions.json

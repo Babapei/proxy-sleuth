@@ -78,18 +78,16 @@ class StatisticalFingerprinter:
 
     async def _fp(self, *args: str) -> tuple[int, str, str]:
         env = {**os.environ, "LLM_FINGERPRINT_KEY": self.cfg.resolve_api_key()}
-        # Prefer global npm install (maintained, updatable), fall back to vendored copy
         if shutil.which("npx"):
             try:
                 p = await asyncio.create_subprocess_exec("npx", "llm-fingerprint", *args,
                                                           stdout=asyncio.subprocess.PIPE,
                                                           stderr=asyncio.subprocess.PIPE, env=env)
-                out, err = await asyncio.wait_for(p.communicate(), timeout=self.cfg.timeout + 120)
+                out, err = await asyncio.wait_for(p.communicate(), timeout=15)
                 if p.returncode == 0:
                     return p.returncode, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
-            except Exception:
-                pass  # fall through to vendor
-        # Vendored fallback
+            except (asyncio.TimeoutError, Exception):
+                pass
         p = await asyncio.create_subprocess_exec("node", str(FP_BIN), *args,
                                                   stdout=asyncio.subprocess.PIPE,
                                                   stderr=asyncio.subprocess.PIPE, env=env)
@@ -103,7 +101,6 @@ class StatisticalFingerprinter:
             self._node = shutil.which("node") is not None
         if not self._node:
             self._ready = False; return False
-        # Global npm install preferred; vendor is sufficient fallback
         if shutil.which("npx"):
             try:
                 p = await asyncio.create_subprocess_exec("npx", "llm-fingerprint", "--help",
@@ -115,6 +112,15 @@ class StatisticalFingerprinter:
             except Exception:
                 pass
         self._ready = FP_BIN.exists()
+        if self._ready:
+            # Ensure database is bootstrapped
+            try:
+                p = await asyncio.create_subprocess_exec("node", str(FP_BIN), "list",
+                                                          stdout=asyncio.subprocess.DEVNULL,
+                                                          stderr=asyncio.subprocess.DEVNULL)
+                await asyncio.wait_for(p.communicate(), timeout=15)
+            except Exception:
+                pass
         return self._ready
 
     def _score(self, verdict: str, jsd: float | None) -> float:

@@ -109,6 +109,8 @@ class APIFeaturesDetector:
             return FeatureResult(feature="include_reasoning", detected=True, detail=f"Accepted", model_hint="deepseek/qwen")
 
     # ── anthropic compat ────────────────────────────────────────
+
+    async def _check_anthropic_compat(self) -> FeatureResult:
         """Check if the endpoint accepts Anthropic-format requests."""
         try:
             anthropic_client = APIClient(

@@ -143,6 +143,23 @@ except Exception as e:
 }
 
 
+# ── Archived v1 benchmarks (keyword-match) — preserved, not in active use ──
+# These were too easy for modern models (keyword presence ≠ correctness).
+# Kept for reference and for testing lower-tier models if needed.
+_V1_ARCHIVE = [
+    {"id": "v1_fibonacci", "prompt": "Write Python code for the nth Fibonacci number using recursion.", "check": lambda r: "def " in r and "return" in r},
+    {"id": "v1_async", "prompt": "Write Python asyncio code to fetch two URLs concurrently and return status codes.", "check": lambda r: "async" in r and "await" in r},
+    {"id": "v1_pandas", "prompt": "Write pandas code to read CSV, groupby 'category', mean of 'value'.", "check": lambda r: "groupby" in r and "mean" in r},
+    {"id": "v1_triangle", "prompt": "Right triangle legs 5 and 12. Hypotenuse?", "check": lambda r: "13" in r},
+    {"id": "v1_knights", "prompt": "Knights/knaves: A says B is knave. B says both knights. What are A,B?", "check": lambda r: "knave" in r.lower()},
+    {"id": "v1_jugs", "prompt": "5L and 3L jugs. Measure exactly 4L.", "check": lambda r: "4" in r and "pour" in r.lower()},
+    {"id": "v1_snake_feet", "prompt": "请解释成语'画蛇添足'的含义。", "check": lambda r: "多余" in r or "多此一举" in r},
+    {"id": "v1_moonlight", "prompt": "床前明月光的下一句？作者？", "check": lambda r: "疑是地上霜" in r or "李白" in r},
+    {"id": "v1_15percent", "prompt": "What is 15% of 200? Just the number.", "check": lambda r: "30" in r},
+    {"id": "v1_paris", "prompt": "What is the capital of France?", "check": lambda r: "paris" in r.lower()},
+]
+
+
 class CapabilityDetector:
     """Tests model capability with execution-verified problems."""
 

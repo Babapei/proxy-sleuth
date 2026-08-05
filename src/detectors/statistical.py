@@ -40,19 +40,22 @@ class StatisticalFingerprinter:
             return {"layer": "statistical", "score": 0.5, "verdict": "NOT_AVAILABLE", "error": "Node.js not available."}
 
         try:
-            code, out, _ = await self._fp(
+            code, out, err = await self._fp(
                 "verify", self.cfg.endpoint,
                 self.cfg.resolve_api_key(), self.cfg.model,
                 "--api", "openai" if self.cfg.protocol == "openai" else "anthropic",
-                "--reps", "8",
+                "--reps", "4",
             )
+            if code != 0:
+                return {"layer": "statistical", "score": 0.5, "verdict": "NOT_AVAILABLE",
+                        "error": f"fp exited {code}: {err[:200] if err else out[:200]}"}
             r = self._parse_verify(out)
             return {"layer": "statistical", "score": self._score(r.verdict, r.mean_jsd), "verdict": r.verdict,
                     "mean_jsd": r.mean_jsd, "details": r.details, "exit_code": code}
         except asyncio.TimeoutError:
             return {"layer": "statistical", "score": 0.5, "verdict": "NOT_AVAILABLE", "error": "Timeout"}
         except Exception as e:
-            return {"layer": "statistical", "score": 0.5, "verdict": "NOT_AVAILABLE", "error": str(e)}
+            return {"layer": "statistical", "score": 0.5, "verdict": "NOT_AVAILABLE", "error": str(e)[:200]}
 
     async def match_model(self) -> dict[str, Any]:
         if not await self._ensure_ready():
@@ -91,7 +94,7 @@ class StatisticalFingerprinter:
         p = await asyncio.create_subprocess_exec("node", str(FP_BIN), *args,
                                                   stdout=asyncio.subprocess.PIPE,
                                                   stderr=asyncio.subprocess.PIPE, env=env)
-        out, err = await asyncio.wait_for(p.communicate(), timeout=self.cfg.timeout + 120)
+        out, err = await asyncio.wait_for(p.communicate(), timeout=300)
         return p.returncode, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
 
     async def _ensure_ready(self) -> bool:

@@ -133,8 +133,15 @@ class StatisticalFingerprinter:
         return 0.5
 
     def _parse_verify(self, out: str) -> FingerprintResult:
-        v = re.search(r'(?:verdict|Verdict)[:\s]+(\w+)', out, re.IGNORECASE)
-        j = re.search(r'(?:JSD|jsd)[:\s]+([\d.]+)', out, re.IGNORECASE)
-        return FingerprintResult(verdict=v.group(1).upper() if v else "NOT_AVAILABLE",
+        v = re.search(r'(?:verdict|Verdict)[:\s]+\s*(.+?)(?:\s+—|\s*\n)', out)
+        j = re.search(r'(?:JSD|jsd)[:\s=]+([\d.]+)', out)
+        verdict = "NOT_AVAILABLE"
+        if v:
+            text = v.group(1).strip().lower()
+            if "no close match" in text or "unknown" in text:
+                verdict = "MISMATCH"
+            elif "match" in text:
+                verdict = "MATCH"
+        return FingerprintResult(verdict=verdict,
                                   mean_jsd=float(j.group(1)) if j else None,
                                   details=out.strip()[:500], raw_output=out)

@@ -78,27 +78,23 @@ class TestContextTruncation:
     def detector(self):
         return ContextTruncationDetector(_cfg(model="gpt-5.6-sol"))
 
-    def test_build_filler_contains_needle(self, detector):
-        msgs = detector._build_filler(depth=5, needle="NEEDLE_ABC")
+    def test_build_conversation_contains_needle(self, detector):
+        msgs = detector._build_conversation(total_rounds=50, needle="NEEDLE_ABC", needle_positions=[10, 30])
         assert any("NEEDLE_ABC" in m.get("content", "") for m in msgs)
 
     @pytest.mark.asyncio
-    async def test_needle_recalled(self, detector, monkeypatch):
+    async def test_all_recalled(self, detector, monkeypatch):
         import secrets
         monkeypatch.setattr(secrets, "token_hex", lambda n: "XYZ")
         detector.client.chat = AsyncMock(return_value=_resp("The code was NEEDLE_XYZ."))
-        r = await detector._needle_test(depth=10)
-        assert r.recalled is True
-
-    @pytest.mark.asyncio
-    async def test_needle_forgotten(self, detector):
-        detector.client.chat = AsyncMock(return_value=_resp("I don't remember."))
-        r = await detector._needle_test(depth=50)
-        assert r.recalled is False
-
-    @pytest.mark.asyncio
-    async def test_full_run(self, detector):
-        detector.client.chat = AsyncMock(return_value=_resp("NEEDLE_FOUND"))
         r = await detector.run()
         assert r["layer"] == "context_truncation"
-        assert len(r["needles"]) == len(ContextTruncationDetector.TEST_DEPTHS)
+        assert r["truncated"] is False
+
+    @pytest.mark.asyncio
+    async def test_all_forgotten(self, detector, monkeypatch):
+        import secrets
+        monkeypatch.setattr(secrets, "token_hex", lambda n: "XYZ")
+        detector.client.chat = AsyncMock(return_value=_resp("I don't remember any code."))
+        r = await detector.run()
+        assert r["truncated"] is True

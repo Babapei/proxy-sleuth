@@ -129,13 +129,22 @@ class KnowledgeProbeEngine:
         )
 
     def _should_model_know(self, group_name: str) -> bool:
+        """Determine whether the claimed model should know this probe group.
+
+        Precision matters:
+        - "claude" alone is too broad (Claude Opus 5 ≠ Claude Fable 5)
+        - Only the SPECIFIC model in the probe's timeframe should match
+        """
         model = self.cfg.model.lower()
         if group_name == "gpt56_only":
-            return "gpt-5.6" in model
+            # Only GPT-5.6 itself — not GPT-5.5, GPT-5.4, etc.
+            return "gpt-5.6" in model or "gpt5.6" in model
         if group_name == "fable5":
-            return "fable" in model or "claude" in model
+            # Only Claude Fable 5 — not Claude Opus 5, Claude Sonnet, etc.
+            return "fable" in model
         if group_name == "deepseek":
-            return "deepseek" in model
+            # DeepSeek V4 specific: Flash/Pro variants, peak pricing, etc.
+            return "deepseek" in model and "v4" in model
         if group_name == "reverse":
             return True
         return False
@@ -147,14 +156,32 @@ class KnowledgeProbeEngine:
         return prefixes[min(attempt - 1, len(prefixes) - 1)] + question
 
     def _compute_overall(self, group_results: list[GroupResult]) -> float:
+        """Weighted score with penalty for knowing things the model shouldn't.
+
+        Expected groups: high score = good (0.35 weight)
+        Unexpected groups with HIGH score → penalty (overknowledge is suspicious)
+        Unexpected groups with LOW score → normal (0.15 weight, low contribution)
+        """
         if not group_results:
             return 0.0
         total_w, weighted_sum = 0.0, 0.0
+
         for g in group_results:
-            w = 0.35 if g.expected else 0.15
-            weighted_sum += g.score * w
+            if g.expected:
+                w = 0.35  # Heavy: MUST know these
+                weighted_sum += g.score * w
+            else:
+                if g.score > 0.5:
+                    # Model knows too much → apply penalty proportional to overknowledge
+                    penalty = (g.score - 0.5) * 0.3
+                    weighted_sum -= penalty
+                w = 0.15
+                weighted_sum += g.score * w
             total_w += w
-        return weighted_sum / total_w if total_w > 0 else 0.0
+
+        # Clamp to [0, 1]
+        base = weighted_sum / total_w if total_w > 0 else 0.0
+        return max(0.0, min(1.0, base))
 
     def _verdict_label(self, score: float) -> str:
         if score >= self.MATCH_THRESHOLD:

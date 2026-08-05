@@ -204,11 +204,11 @@ class APIFeaturesDetector:
                 max_tokens=200,
                 reasoning_effort="low",
             )
-            # If it accepted the param, it's likely GPT-5.x
-            return FeatureResult(feature="reasoning_effort", detected=True, detail="Endpoint accepted reasoning_effort parameter.", model_hint="gpt-5.x")
+            # reasoning_effort is supported by GPT-5.x, DeepSeek V4, and Qwen3.8
+            return FeatureResult(feature="reasoning_effort", detected=True, detail="Endpoint accepted reasoning_effort.", model_hint="")
         except APIError as e:
-            if "reasoning_effort" in str(e).lower() or "unknown" in str(e).lower():
-                return FeatureResult(feature="reasoning_effort", detected=False, detail="reasoning_effort rejected.", model_hint="not-gpt-5.x")
+            if _is_unknown_param_error(e.message, "reasoning_effort"):
+                return FeatureResult(feature="reasoning_effort", detected=False, detail="reasoning_effort rejected.", model_hint="")
             return FeatureResult(feature="reasoning_effort", detected=False, detail=f"API error: {e.message}", model_hint="")
 
     async def _check_stream_format(self) -> FeatureResult:

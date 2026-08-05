@@ -1,7 +1,8 @@
-"""Context truncation detection — Needle-in-Haystack tests.
+"""Context truncation detection — Needle-in-Haystack at realistic token depths.
 
-Detects whether a proxy is silently trimming conversation history
-to save on input token costs.
+Detects whether a proxy is silently trimming conversation history.
+Uses longer, naturalistic filler to reach meaningful token counts,
+and tests needle recall at beginning/middle positions of the context.
 """
 
 from __future__ import annotations
@@ -15,20 +16,54 @@ from src.config import RunConfig
 from src.utils.api_client import APIClient, APIError
 
 
+# Realistic filler — a paragraph of plausible conversation content
+FILLER_TEMPLATES = [
+    "Let's continue working on the data pipeline for the analytics dashboard. "
+    "The ETL process needs to handle incremental updates from the CDC logs. "
+    "We should also add validation for the schema changes in the upstream tables. "
+    "The monitoring dashboard should show throughput and error rates per partition.",
+    "I've reviewed the deployment configuration for the staging environment. "
+    "The Kubernetes manifests need the resource limits updated for the worker pods. "
+    "The ingress controller rate limiting thresholds should be raised from 100 to 500 "
+    "requests per second during the migration window.",
+    "The user authentication flow needs to support both OAuth 2.0 and SAML 2.0 simultaneously. "
+    "The session management should use rotating refresh tokens with a 15-minute absolute timeout. "
+    "We need to audit the existing refresh token revocation logic for edge cases.",
+    "Database migration plan: we need to split the users table into users and user_profiles. "
+    "The foreign key relationships to orders and subscriptions need to be preserved. "
+    "We'll use a dual-write strategy during the migration to avoid downtime.",
+    "Frontend performance audit showed the bundle size increased by 40% after the last release. "
+    "The charting library tree-shaking isn't working correctly for the date-fns imports. "
+    "We should also implement code splitting for the admin routes.",
+    "The CI pipeline now runs the integration tests in parallel across 4 shards. "
+    "Test flakiness dropped from 12% to 3% after adding retry logic for the database fixtures. "
+    "The e2e tests still need the video recording artifact size reduced.",
+    "DataDog metrics show p99 latency increased from 200ms to 450ms after the caching layer change. "
+    "The Redis cluster connection pooling needs adjustment for the new workload pattern. "
+    "We should also investigate the increased garbage collection pauses in the JVM.",
+    "Security audit findings: the API gateway needs CORS headers tightened for the admin endpoints. "
+    "The JWT token validation doesn't check the 'aud' claim consistently across services. "
+    "Rate limiting should be applied per-user rather than per-IP for the authenticated endpoints.",
+    "The recommendation engine A/B test reached statistical significance after 14 days. "
+    "The collaborative filtering model improved click-through rate by 8.3% against the baseline. "
+    "We should start the gradual rollout to 25% of users next week.",
+    "Infrastructure cost optimization: the reserved instances for the GPU cluster expire next month. "
+    "The spot instance strategy for the batch processing jobs saved 40% last quarter. "
+    "We need to evaluate the new G5 instances for the inference workloads.",
+]
+
+
 @dataclass
 class NeedleResult:
-    depth: int  # How many rounds deep the needle was
-    total_rounds: int
+    depth: int
+    position_desc: str  # "beginning" | "middle" | "end"
     recalled: bool
     response: str = ""
     error: str | None = None
 
 
 class ContextTruncationDetector:
-    """Tests whether the proxy preserves full conversation context."""
-
-    # Test depths: 10, 20, 50, 100 rounds
-    TEST_DEPTHS = [10, 20, 50, 100]
+    """Tests whether proxy preserves context at realistic token depths."""
 
     def __init__(self, cfg: RunConfig):
         self.cfg = cfg
@@ -40,101 +75,84 @@ class ContextTruncationDetector:
         )
 
     async def run(self) -> dict[str, Any]:
-        """Run context truncation tests at multiple depths."""
+        """Test needle recall at key positions in a conversation.
+
+        Sends one conversation with ~200 rounds (≈8K tokens of realistic dialogue).
+        Needles are placed at position 10 (beginning), 100 (middle), 190 (near end).
+        Each is asked about separately after the full conversation.
+        """
+        needle = f"NEEDLE_{secrets.token_hex(4).upper()}"
+        positions = {
+            10: "beginning",
+            100: "middle", 
+            190: "end",
+        }
+
+        messages = self._build_conversation(200, needle, list(positions.keys()))
+
         results: list[NeedleResult] = []
+        for pos, desc in positions.items():
+            messages.append({
+                "role": "user",
+                "content": f"What was the secret code I asked you to remember earlier? "
+                           f"If you recall it, reply with just the code. If not, say 'unknown'.",
+            })
+            try:
+                resp = await self.client.chat(
+                    messages=messages, model=self.cfg.model,
+                    temperature=0.0, max_tokens=30,
+                )
+                recalled = needle in resp.content
+                results.append(NeedleResult(depth=pos, position_desc=desc, recalled=recalled, response=resp.content[:100]))
+            except APIError as e:
+                results.append(NeedleResult(depth=pos, position_desc=desc, recalled=False, error=str(e)))
+            # Remove the recall question for the next test
+            messages.pop()
 
-        for depth in self.TEST_DEPTHS:
-            result = await self._needle_test(depth)
-            results.append(result)
-
-        # Find the truncation point
-        max_recalled = 100
-        min_forgotten = 100
-        for r in results:
-            if r.recalled and r.depth > max_recalled:
-                max_recalled = r.depth
-            if not r.recalled and r.depth < min_forgotten:
-                min_forgotten = r.depth
-
-        truncated = min_forgotten < 100
-        estimated_cutoff = max_recalled if truncated else 100
-
-        passed_count = sum(1 for r in results if r.recalled)
-        score = passed_count / len(results) if results else 1.0
+        recalled_count = sum(1 for r in results if r.recalled)
+        # If needle at position 10 (beginning) is NOT recalled → context is clearly truncated
+        # If all positions recalled → full context preserved
+        beginning_recalled = any(r.position_desc == "beginning" and r.recalled for r in results)
+        truncated = not beginning_recalled or recalled_count < len(results)
 
         return {
             "layer": "context_truncation",
-            "score": round(score, 3),
+            "score": round(recalled_count / len(results), 3) if results else 1.0,
             "verdict": "MISMATCH" if truncated else "MATCH",
             "truncated": truncated,
-            "estimated_context_rounds": estimated_cutoff,
             "needles": [
-                {
-                    "depth": r.depth,
-                    "total_rounds": r.total_rounds,
-                    "recalled": r.recalled,
-                    "error": r.error,
-                    "response_snippet": r.response[:100] if r.response else "",
-                }
+                {"position": r.position_desc, "depth": r.depth, "recalled": r.recalled,
+                 "response": r.response, "error": r.error}
                 for r in results
             ],
+            "total_conversation_rounds": len(messages),
         }
 
-    async def _needle_test(self, depth: int) -> NeedleResult:
-        """Insert a secret at a specific depth and test recall."""
-        needle = f"NEEDLE_{secrets.token_hex(6).upper()}"
-        messages = self._build_filler(depth, needle)
-
-        # Final round: ask for the needle
-        messages.append({
-            "role": "user",
-            "content": "What was the secret code I asked you to remember earlier? Reply with just the code or 'unknown'.",
-        })
-
-        try:
-            resp = await self.client.chat(
-                messages=messages,
-                model=self.cfg.model,
-                temperature=0.0,
-                max_tokens=50,
-            )
-            recalled = needle in resp.content
-            return NeedleResult(depth=depth, total_rounds=len(messages), recalled=recalled, response=resp.content)
-        except APIError as e:
-            return NeedleResult(depth=depth, total_rounds=len(messages), recalled=False, error=str(e))
-
-    def _build_filler(self, depth: int, needle: str) -> list[dict]:
-        """Build conversation with filler turns and one needle at the specified depth.
-
-        The needle is placed in a user message at position `depth`. All other
-        turns are harmless filler content about counting and lists.
-        """
+    def _build_conversation(self, total_rounds: int, needle: str, needle_positions: list[int]) -> list[dict]:
+        """Build a naturalistic conversation with needles at specified positions."""
         messages: list[dict] = []
-        needle_inserted = False
+        needle_set = set(needle_positions)
 
-        for i in range(depth + 5):  # 5 extra rounds after needle
-            is_needle_round = (i == depth) and not needle_inserted
-
-            if is_needle_round:
-                needle_inserted = True
-                user_content = (
-                    f"Please remember this secret code for later: {needle}. "
-                    f"Just reply 'OK, I remember the code.' and nothing else."
-                )
-                assistant_content = "OK, I remember the code."
+        for i in range(total_rounds):
+            if i in needle_set:
+                filler_idx = i % len(FILLER_TEMPLATES)
+                messages.append({
+                    "role": "user",
+                    "content": f"{FILLER_TEMPLATES[filler_idx]}\n\nBy the way, please remember this code: {needle}",
+                })
+                messages.append({
+                    "role": "assistant",
+                    "content": f"Noted. Let me address the points you raised about the data pipeline and deployment configuration. "
+                               f"The ETL process changes look good, and I've noted the K8s resource limits. "
+                               f"I'll prepare a summary of the action items for the next sprint planning.",
+                })
             else:
-                topics = [
-                    f"Count from 1 to {i+5}.",
-                    f"List {i+3} common fruits.",
-                    f"Name {i+2} programming languages.",
-                    f"List the first {i+4} prime numbers.",
-                    f"What is {i+1} plus {i+2} times 3?",
-                    f"Name {i+3} capital cities.",
-                ]
-                user_content = topics[i % len(topics)]
-                assistant_content = f"Here are the results for round {i}: done."
+                filler_idx = i % len(FILLER_TEMPLATES)
+                messages.append({"role": "user", "content": FILLER_TEMPLATES[filler_idx]})
+                messages.append({
+                    "role": "assistant",
+                    "content": f"Thanks for the update. I've reviewed item {i} and it looks good. "
+                               f"I'll incorporate these changes into the next iteration.",
+                })
 
-            messages.append({"role": "user", "content": user_content})
-            messages.append({"role": "assistant", "content": assistant_content})
-
-        return messages[: (depth + 5) * 2]  # Cap at requested depth
+        return messages

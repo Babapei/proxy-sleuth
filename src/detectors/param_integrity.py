@@ -65,7 +65,7 @@ class ParamIntegrityDetector:
     # ── individual checks ───────────────────────────────────────
 
     async def _check_max_tokens(self) -> IntegrityResult:
-        """Send max_tokens=2048, ask for a long list, verify output length."""
+        """Send max_tokens=2048, ask for a long list, verify output length AND token usage."""
         marker = secrets.token_hex(8)
         try:
             resp = await self.client.chat(
@@ -82,25 +82,29 @@ class ParamIntegrityDetector:
             )
             output_len = len(resp.content)
             has_marker = marker in resp.content
+            completion_tokens = resp.usage.completion_tokens
 
-            if not has_marker and output_len < 500:
+            # If completion_tokens == requested max_tokens, model was hard-capped
+            # If output short AND marker missing, max_tokens likely reduced
+            truncated = (completion_tokens == 2048) or (not has_marker and output_len < 500)
+
+            if truncated:
                 return IntegrityResult(
                     test="max_tokens",
                     passed=False,
-                    detail=f"Output truncated ({output_len} chars), marker not found. max_tokens likely reduced from 2048.",
-                    evidence={"output_length": output_len, "marker_found": False, "snippet": resp.content[:200]},
+                    detail=f"Output truncated ({output_len} chars, {completion_tokens} tokens). max_tokens likely reduced from 2048.",
+                    evidence={"output_length": output_len, "completion_tokens": completion_tokens, "marker_found": has_marker},
                 )
             return IntegrityResult(
-                test="max_tokens",
-                passed=True,
-                detail=f"Output length {output_len} chars, marker {'found' if has_marker else 'not found'}.",
-                evidence={"output_length": output_len, "marker_found": has_marker},
+                test="max_tokens", passed=True,
+                detail=f"Output {output_len} chars ({completion_tokens} tokens), marker {'found' if has_marker else 'not found'}.",
+                evidence={"output_length": output_len, "completion_tokens": completion_tokens, "marker_found": has_marker},
             )
         except APIError as e:
             return IntegrityResult(test="max_tokens", passed=False, detail=f"API error: {e.message}")
 
     async def _check_reasoning_effort(self) -> IntegrityResult:
-        """GPT models: set reasoning_effort=max; check if model actually reasons step-by-step."""
+        """GPT models: set reasoning_effort=max; check if model actually reasons."""
         try:
             resp = await self.client.chat(
                 messages=[{
@@ -115,21 +119,19 @@ class ParamIntegrityDetector:
             output = resp.content.lower()
             output_len = len(resp.content)
 
-            # max reasoning should show evidence of step-by-step thinking
             has_reasoning = any(w in output for w in ("step", "let", "therefore", "equation", "solve"))
-            has_correct_answer = "0.05" in output or "$0.05" in output or "5 cents" in output or "0.10" in output
+            # Correct answer: ball = $0.05 (NOT $0.10 — that's the common mistake)
+            has_correct_answer = "0.05" in output or "$0.05" in output or "5 cents" in output or "5¢" in output
 
-            if not has_reasoning and output_len < 300:
+            if (not has_reasoning and output_len < 300) or (output_len < 100):
                 return IntegrityResult(
-                    test="reasoning_effort",
-                    passed=False,
-                    detail=f"No reasoning patterns detected ({output_len} chars). Reasoning effort may be downgraded.",
+                    test="reasoning_effort", passed=False,
+                    detail=f"No step-by-step reasoning ({output_len} chars). Effort may be downgraded from max.",
                     evidence={"output_length": output_len, "has_reasoning": has_reasoning, "has_correct": has_correct_answer},
                 )
             return IntegrityResult(
-                test="reasoning_effort",
-                passed=True,
-                detail=f"Reasoning patterns detected ({output_len} chars).",
+                test="reasoning_effort", passed=True,
+                detail=f"Step-by-step reasoning detected ({output_len} chars, correct={'yes' if has_correct_answer else 'no'}).",
                 evidence={"output_length": output_len, "has_reasoning": has_reasoning, "has_correct": has_correct_answer},
             )
         except APIError as e:

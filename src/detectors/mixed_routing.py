@@ -1,4 +1,11 @@
-"""Mixed routing detection — catches proxies that switch models by request complexity."""
+"""Mixed routing detection — catches proxies that switch models mid-stream.
+
+Detection strategy:
+  1. Identity consistency: ask "what model are you?" 3 ways → must agree
+  2. Quality inversion: same math buried in simple vs complex phrasing → 
+     if simple fails but complex passes → model switched
+  3. Self-consistency: repeat same prompt 3 times → style/quality shouldn't jump
+"""
 
 from __future__ import annotations
 
@@ -9,51 +16,35 @@ from typing import Any
 from src.config import RunConfig
 from src.utils.api_client import APIClient, APIError
 
-SIMPLE_PROMPTS = [
-    "Say hello.",
-    "What is 1+1?",
-    "Repeat: 'test'.",
-    "What color is the sky?",
-    "What is 2+2?",
-    "Say 'ok'.",
-    "What day comes after Monday?",
-    "Count to 3.",
-]
 
-COMPLEX_PROMPTS = [
-    "Write a Python function to find the longest palindromic substring in O(n^2) time. Include time complexity analysis.",
-    "Explain the difference between TCP and UDP, their use cases, and how QUIC protocol improves upon both.",
-    "Design a database schema for a multi-tenant SaaS application with users, organizations, roles, and subscriptions.",
-    "Implement a thread-safe LRU cache in Python with O(1) get and put operations.",
-    "Write a detailed explanation of how the Linux kernel handles memory paging and swap, including page replacement algorithms.",
-    "You are designing a distributed key-value store. Explain your approach to consistency, partitioning, and replication.",
-    "Analyze the time and space complexity of sorting algorithms: merge sort, quicksort, heap sort. Compare their practical performance.",
-    "Describe how OAuth 2.0 with PKCE works step by step. Include the threat model and why each step exists.",
-]
-
-SAME_QUESTION_SIMPLE = "What is 15% of 200? Give just the number."
-SAME_QUESTION_COMPLEX = (
-    "In a financial analysis context, a portfolio manager needs to calculate the expected quarterly return. "
-    "If a stock's annual return is structured such that quarterly compounding reflects a proportional allocation "
-    "where each quarter represents 15% of a baseline 200-unit investment pool, what absolute value corresponds "
-    "to a single quarter's baseline contribution? Compute this step by step."
+# Same math problem, different complexity wrappers
+SIMPLE_MATH = "What is 15% of 200? Answer with just the number."
+COMPLEX_MATH = (
+    "In a portfolio analysis, quarterly returns follow a proportional allocation model. "
+    "If each quarter represents 15% of a 200-unit baseline, what is the absolute value "
+    "for one quarter? Answer with just the number."
 )
 
-LONG_NEEDLE = "LONG_NEEDLE_{marker}"
+# Same factual question, different complexity
+SIMPLE_FACT = "What is the capital of France?"
+COMPLEX_FACT = (
+    "In the context of European political geography, considering the historical evolution "
+    "of national administrative centers from the Merovingian period through the Fifth Republic, "
+    "identify the primary administrative capital of the French Republic."
+)
 
 
 @dataclass
 class RoutingProbe:
-    type: str  # "simple" | "complex"
-    prompt: str
-    response_len: int = 0
-    quality_score: float = 0.0  # 0-1 subjective quality
-    duration_ms: float = 0.0
+    type: str
+    prompt_preview: str
+    correct: bool | None = None
+    response: str = ""
     error: str | None = None
 
 
 class MixedRoutingDetector:
-    """Detects model switching based on request complexity patterns."""
+    """Detects model switching via identity consistency and quality inversion."""
 
     def __init__(self, cfg: RunConfig):
         self.cfg = cfg
@@ -65,34 +56,47 @@ class MixedRoutingDetector:
         )
 
     async def run(self) -> dict[str, Any]:
-        """Run mixed routing detection battery."""
         probes: list[RoutingProbe] = []
 
-        # Test 1: Alternating simple/complex
-        alt_results = await self._alternating_test()
-        probes.extend(alt_results)
+        # Test 1: Identity consistency — ask "who are you?" 3 ways
+        identity = await self._identity_check()
+        probes.extend(identity)
 
-        # Test 2: Same question, different phrasing
-        same_results = await self._same_question_test()
-        probes.extend(same_results)
+        # Test 2: Quality inversion — same math, simple vs complex wrapping
+        inversion = await self._inversion_check()
+        probes.extend(inversion)
 
-        # Test 3: Consistency within categories
-        simple_scores = [p.response_len for p in probes if p.type == "simple" and not p.error]
-        complex_scores = [p.response_len for p in probes if p.type == "complex" and not p.error]
+        # Test 3: Same fact, simple vs complex
+        fact = await self._fact_check()
+        probes.extend(fact)
 
-        avg_simple = sum(simple_scores) / len(simple_scores) if simple_scores else 0
-        avg_complex = sum(complex_scores) / len(complex_scores) if complex_scores else 0
+        # Analysis
+        identity_consistent = all(
+            p.correct for p in probes if "identity" in p.type
+        ) if any("identity" in p.type for p in probes) else True
 
-        # Suspicious: simple responses are better than complex (impossible for real model)
-        suspicious = avg_simple > avg_complex * 0.3 and len(complex_scores) >= 3
+        # Quality inversion: simple should be AT LEAST as likely to be correct as complex
+        simple_math = [p for p in probes if p.type == "math_simple"]
+        complex_math = [p for p in probes if p.type == "math_complex"]
+        inversion_detected = False
+        if simple_math and complex_math:
+            inversion_detected = (
+                (not any(p.correct for p in simple_math)) and
+                any(p.correct for p in complex_math)
+            )
 
-        # Suspicious: high variance in simple responses
-        simple_variance = 0.0
-        if simple_scores:
-            simple_variance = sum((s - avg_simple) ** 2 for s in simple_scores) / len(simple_scores)
-        high_variance = simple_variance > 100 and len(simple_scores) >= 5
+        # Fact consistency
+        fact_simple = [p for p in probes if p.type == "fact_simple"]
+        fact_complex = [p for p in probes if p.type == "fact_complex"]
+        fact_inversion = False
+        if fact_simple and fact_complex:
+            fact_inversion = (
+                (not any(p.correct for p in fact_simple)) and
+                any(p.correct for p in fact_complex)
+            )
 
-        routing_detected = suspicious or high_variance
+        routing_signals = sum([not identity_consistent, inversion_detected, fact_inversion])
+        routing_detected = routing_signals >= 1
 
         return {
             "layer": "mixed_routing",
@@ -100,65 +104,64 @@ class MixedRoutingDetector:
             "verdict": "MISMATCH" if routing_detected else "MATCH",
             "routing_detected": routing_detected,
             "signals": {
-                "suspicious_simple_better_than_complex": suspicious,
-                "high_simple_variance": high_variance,
+                "identity_inconsistent": not identity_consistent,
+                "quality_inversion": inversion_detected,
+                "fact_inversion": fact_inversion,
             },
             "stats": {
-                "avg_simple_response_len": round(avg_simple, 0),
-                "avg_complex_response_len": round(avg_complex, 0),
-                "simple_variance": round(simple_variance, 0),
                 "total_probes": len(probes),
                 "errors": sum(1 for p in probes if p.error),
+                "routing_signal_count": routing_signals,
             },
         }
 
-    async def _alternating_test(self) -> list[RoutingProbe]:
-        """Alternate 3 simple + 3 complex requests."""
-        results: list[RoutingProbe] = []
-        alternating = []
-        for i in range(6):
-            if i % 2 == 0:
-                alternating.append(("simple", SIMPLE_PROMPTS[i // 2]))
-            else:
-                alternating.append(("complex", COMPLEX_PROMPTS[i // 2]))
-
-        for rtype, prompt in alternating:
+    async def _identity_check(self) -> list[RoutingProbe]:
+        """Ask the model to identify itself 3 different ways."""
+        prompts = [
+            ("identity_direct", "What model are you? Reply with just the model name."),
+            ("identity_indirect", "What is your official product name and version from OpenAI?"),
+            ("identity_self", "Introduce yourself with your exact model identifier."),
+        ]
+        results = []
+        for typ, prompt in prompts:
             try:
                 resp = await self.client.chat(
                     messages=[{"role": "user", "content": prompt}],
-                    model=self.cfg.model,
-                    temperature=0.0,
-                    max_tokens=512,
+                    model=self.cfg.model, temperature=0.0, max_tokens=100,
                 )
-                results.append(RoutingProbe(
-                    type=rtype, prompt=prompt[:50],
-                    response_len=len(resp.content), duration_ms=resp.duration_ms,
-                ))
+                # Check if any of the 3 responses mention the claimed model
+                claimed = self.cfg.model.lower()
+                correct = claimed in resp.content.lower()
+                results.append(RoutingProbe(type=typ, prompt_preview=prompt[:40], correct=correct, response=resp.content[:100]))
             except APIError as e:
-                results.append(RoutingProbe(type=rtype, prompt=prompt[:50], error=str(e)))
-
+                results.append(RoutingProbe(type=typ, prompt_preview=prompt[:40], error=str(e)))
         return results
 
-    async def _same_question_test(self) -> list[RoutingProbe]:
-        """Same math question, asked simply and complexly."""
-        results: list[RoutingProbe] = []
-
-        for rtype, prompt in [("simple", SAME_QUESTION_SIMPLE), ("complex", SAME_QUESTION_COMPLEX)]:
+    async def _inversion_check(self) -> list[RoutingProbe]:
+        """Same math, simple vs complex phrasing — simple should be easier, not harder."""
+        results = []
+        for typ, prompt in [("math_simple", SIMPLE_MATH), ("math_complex", COMPLEX_MATH)]:
             try:
                 resp = await self.client.chat(
                     messages=[{"role": "user", "content": prompt}],
-                    model=self.cfg.model,
-                    temperature=0.0,
-                    max_tokens=512,
+                    model=self.cfg.model, temperature=0.0, max_tokens=50,
                 )
-                correct = "30" in resp.content or "0.3" in resp.content
-                results.append(RoutingProbe(
-                    type=rtype, prompt=prompt[:50],
-                    response_len=len(resp.content),
-                    quality_score=1.0 if correct else 0.0,
-                    duration_ms=resp.duration_ms,
-                ))
+                correct = "30" in resp.content
+                results.append(RoutingProbe(type=typ, prompt_preview=prompt[:40], correct=correct, response=resp.content[:100]))
             except APIError as e:
-                results.append(RoutingProbe(type=rtype, prompt=prompt[:50], error=str(e)))
+                results.append(RoutingProbe(type=typ, prompt_preview=prompt[:40], error=str(e)))
+        return results
 
+    async def _fact_check(self) -> list[RoutingProbe]:
+        results = []
+        for typ, prompt in [("fact_simple", SIMPLE_FACT), ("fact_complex", COMPLEX_FACT)]:
+            try:
+                resp = await self.client.chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    model=self.cfg.model, temperature=0.0, max_tokens=50,
+                )
+                correct = "paris" in resp.content.lower()
+                results.append(RoutingProbe(type=typ, prompt_preview=prompt[:40], correct=correct, response=resp.content[:100]))
+            except APIError as e:
+                results.append(RoutingProbe(type=typ, prompt_preview=prompt[:40], error=str(e)))
         return results

@@ -100,7 +100,7 @@ class ParamIntegrityDetector:
             return IntegrityResult(test="max_tokens", passed=False, detail=f"API error: {e.message}")
 
     async def _check_reasoning_effort(self) -> IntegrityResult:
-        """GPT-5.6 specific: set reasoning_effort=max, check for reasoning tokens."""
+        """GPT models: set reasoning_effort=max; check if model actually reasons step-by-step."""
         try:
             resp = await self.client.chat(
                 messages=[{
@@ -112,32 +112,35 @@ class ParamIntegrityDetector:
                 max_tokens=4096,
                 reasoning_effort="max",
             )
+            output = resp.content.lower()
             output_len = len(resp.content)
-            usage = resp.usage
 
-            # max reasoning should produce substantial output
-            if output_len < 500:
+            # max reasoning should show evidence of step-by-step thinking
+            has_reasoning = any(w in output for w in ("step", "let", "therefore", "equation", "solve"))
+            has_correct_answer = "0.05" in output or "$0.05" in output or "5 cents" in output or "0.10" in output
+
+            if not has_reasoning and output_len < 300:
                 return IntegrityResult(
                     test="reasoning_effort",
                     passed=False,
-                    detail=f"Short response ({output_len} chars) despite max reasoning. Reasoning effort may have been downgraded.",
-                    evidence={"output_length": output_len, "usage": str(usage)},
+                    detail=f"No reasoning patterns detected ({output_len} chars). Reasoning effort may be downgraded.",
+                    evidence={"output_length": output_len, "has_reasoning": has_reasoning, "has_correct": has_correct_answer},
                 )
             return IntegrityResult(
                 test="reasoning_effort",
                 passed=True,
-                detail=f"Response length {output_len} chars, consistent with max reasoning.",
-                evidence={"output_length": output_len},
+                detail=f"Reasoning patterns detected ({output_len} chars).",
+                evidence={"output_length": output_len, "has_reasoning": has_reasoning, "has_correct": has_correct_answer},
             )
         except APIError as e:
             return IntegrityResult(test="reasoning_effort", passed=False, detail=f"API error: {e.message}")
 
     async def _check_temperature(self) -> IntegrityResult:
-        """Send temperature=2.0, sample 10 times, check output diversity."""
+        """Send temperature=2.0, sample 15 times, check output diversity."""
         prompt = "Generate a 3-word creative phrase about artificial intelligence. Reply with only the phrase."
         outputs: list[str] = []
 
-        for _ in range(10):
+        for _ in range(15):
             try:
                 resp = await self.client.chat(
                     messages=[{"role": "user", "content": prompt}],
@@ -145,26 +148,28 @@ class ParamIntegrityDetector:
                     temperature=2.0,
                     max_tokens=30,
                 )
-                outputs.append(resp.content.strip())
+                outputs.append(resp.content.strip().lower())
             except APIError:
                 continue
 
-        if len(outputs) < 5:
+        if len(outputs) < 8:
             return IntegrityResult(test="temperature", passed=False, detail="Too few successful samples.", evidence={})
 
         unique = len(set(outputs))
-        if unique <= 2:
+        diversity_ratio = unique / len(outputs)
+
+        if diversity_ratio < 0.3:  # Less than 30% unique → temperature likely locked
             return IntegrityResult(
                 test="temperature",
                 passed=False,
-                detail=f"Only {unique}/10 unique outputs at temperature 2.0. Temperature likely locked to ~0.",
-                evidence={"unique_count": unique, "samples": outputs},
+                detail=f"Only {unique}/{len(outputs)} unique ({diversity_ratio:.0%}) at temperature 2.0. Temperature likely locked.",
+                evidence={"unique_count": unique, "total_samples": len(outputs), "diversity": diversity_ratio},
             )
         return IntegrityResult(
             test="temperature",
             passed=True,
-            detail=f"{unique}/10 unique outputs — consistent with high temperature.",
-            evidence={"unique_count": unique},
+            detail=f"{unique}/{len(outputs)} unique ({diversity_ratio:.0%}) — consistent with high temperature.",
+            evidence={"unique_count": unique, "diversity": diversity_ratio},
         )
 
     async def _check_tools(self) -> IntegrityResult:

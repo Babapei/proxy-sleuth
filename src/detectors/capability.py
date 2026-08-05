@@ -46,7 +46,7 @@ BENCHMARKS = {
         {
             "id": "math_birthday_paradox",
             "prompt": "In a room of 23 people, what is the approximate probability that at least two share a birthday? (Assume 365 days, all equally likely.) Give just the percentage rounded to nearest whole number.",
-            "check": lambda resp: "50" in resp and ("%" in resp or "percent" in resp.lower()),
+            "check": lambda resp: any(v in resp.replace("%", "").strip() for v in ("50", "51", "50.7")),
         },
     ],
     "reasoning": [

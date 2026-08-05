@@ -76,11 +76,11 @@ class APIFeaturesDetector:
                 model=self.cfg.model, temperature=1.0, max_tokens=10,
                 extra_body={"min_p": 0.05},
             )
-            return FeatureResult(feature="min_p", detected=True, detail="min_p parameter accepted — DeepSeek signature.", model_hint="deepseek")
+            return FeatureResult(feature="min_p", detected=True, detail="min_p accepted — DeepSeek signature.", model_hint="deepseek")
         except APIError as e:
-            if "min_p" in str(e).lower() or "unknown" in str(e).lower() or "unrecognized" in str(e).lower():
+            if _is_unknown_param_error(e.message, "min_p"):
                 return FeatureResult(feature="min_p", detected=False, detail="min_p rejected (not DeepSeek)", model_hint="gpt-5.x/claude")
-            return FeatureResult(feature="min_p", detected=True, detail=f"Accepted (or other error: {e.message[:60]})", model_hint="deepseek")
+            return FeatureResult(feature="min_p", detected=True, detail=f"Accepted (other error: {e.message[:60]})", model_hint="deepseek")
 
     async def _check_top_a(self) -> FeatureResult:
         """top_a is exclusive to DeepSeek V4."""
@@ -90,14 +90,14 @@ class APIFeaturesDetector:
                 model=self.cfg.model, temperature=1.0, max_tokens=10,
                 extra_body={"top_a": 0.5},
             )
-            return FeatureResult(feature="top_a", detected=True, detail="top_a parameter accepted — DeepSeek signature.", model_hint="deepseek")
+            return FeatureResult(feature="top_a", detected=True, detail="top_a accepted — DeepSeek signature.", model_hint="deepseek")
         except APIError as e:
-            if "top_a" in str(e).lower() or "unknown" in str(e).lower() or "unrecognized" in str(e).lower():
+            if _is_unknown_param_error(e.message, "top_a"):
                 return FeatureResult(feature="top_a", detected=False, detail="top_a rejected (not DeepSeek)", model_hint="gpt-5.x/claude")
             return FeatureResult(feature="top_a", detected=True, detail=f"Accepted", model_hint="deepseek")
 
     async def _check_include_reasoning(self) -> FeatureResult:
-        """include_reasoning is supported by DeepSeek V4 and Qwen3.8, not GPT/Claude."""
+        """include_reasoning is supported by DeepSeek V4 and Qwen, not GPT/Claude."""
         try:
             resp = await self.client.chat(
                 messages=[{"role": "user", "content": "1+1=?"}],
@@ -106,7 +106,7 @@ class APIFeaturesDetector:
             )
             return FeatureResult(feature="include_reasoning", detected=True, detail="include_reasoning accepted — DeepSeek or Qwen.", model_hint="deepseek/qwen")
         except APIError as e:
-            if "include_reasoning" in str(e).lower() or "unknown" in str(e).lower():
+            if _is_unknown_param_error(e.message, "include_reasoning"):
                 return FeatureResult(feature="include_reasoning", detected=False, detail="include_reasoning rejected (likely GPT/Claude)", model_hint="gpt-5.x/claude")
             return FeatureResult(feature="include_reasoning", detected=True, detail=f"Accepted", model_hint="deepseek/qwen")
 
@@ -259,3 +259,17 @@ class APIFeaturesDetector:
             return FeatureResult(feature="self_report", detected=False, detail=f"No clear self-identification: '{content[:60]}'", model_hint="")
         except APIError:
             return FeatureResult(feature="self_report", detected=False, detail="API error.", model_hint="")
+
+
+def _is_unknown_param_error(error_msg: str, param_name: str) -> bool:
+    """Detect 'unknown parameter' errors across different API error formats.
+
+    OpenAI: "Unknown parameter: 'min_p'"
+    Anthropic: "Unrecognized request argument: min_p"
+    Generic: "Invalid parameter", "additional properties", etc.
+    """
+    msg = error_msg.lower()
+    if param_name in msg:
+        if any(w in msg for w in ("unknown", "unrecognized", "invalid", "unexpected", "not supported", "not allowed", "additional properties")):
+            return True
+    return False

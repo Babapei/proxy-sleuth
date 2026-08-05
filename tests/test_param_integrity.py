@@ -25,13 +25,13 @@ class TestParamIntegrity:
 
     @pytest.mark.asyncio
     async def test_temperature_locked(self, detector):
-        detector.client.chat = AsyncMock(side_effect=[_resp("same phrase") for _ in range(10)])
+        detector.client.chat = AsyncMock(side_effect=[_resp("same phrase") for _ in range(20)])
         r = await detector._check_temperature()
         assert r.passed is False
 
     @pytest.mark.asyncio
     async def test_temperature_diverse(self, detector):
-        detector.client.chat = AsyncMock(side_effect=[_resp(f"phrase {i}") for i in range(10)])
+        detector.client.chat = AsyncMock(side_effect=[_resp(f"phrase {i}") for i in range(20)])
         r = await detector._check_temperature()
         assert r.passed is True
 

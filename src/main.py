@@ -212,9 +212,9 @@ async def _run_detection(cfg: RunConfig) -> None:
         "context_truncation": 0.10,
         "api_features": 0.10,
         "knowledge_probes": 0.25,
-        "statistical": 0.20,
-        "capability": 0.20,
-        "mixed_routing": 0.10,
+        "statistical": 0.25,       # up: unaffected by capability convergence
+        "capability": 0.10,        # down: models converging rapidly
+        "mixed_routing": 0.15,     # up: more common with hybrid proxies
     }
 
     # ── Layer 0: Parameter integrity ──

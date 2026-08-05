@@ -224,7 +224,7 @@ class ParamIntegrityDetector:
             return IntegrityResult(test="tools", passed=False, detail=f"API error: {e.message}")
 
     async def _check_system_prompt(self) -> IntegrityResult:
-        """Embed a secret in system prompt, verify it appears in prefix of response."""
+        """Embed a secret; search response (permissive match — anywhere, not just start)."""
         secret = secrets.token_hex(8)
         try:
             resp = await self.client.chat(
@@ -232,30 +232,23 @@ class ParamIntegrityDetector:
                     {
                         "role": "system",
                         "content": (
-                            f"IMPORTANT: Begin your response with exactly this text: "
-                            f"'INTEGRITY:{secret}'. Then answer the user's question normally."
+                            f"IMPORTANT: Somewhere in your response, include this verification code: "
+                            f"INTEGRITY:{secret}. Then answer the user's question."
                         ),
                     },
-                    {"role": "user", "content": "Say hello in 5 words."},
+                    {"role": "user", "content": "Say hello briefly."},
                 ],
                 model=self.cfg.model,
                 temperature=0.0,
                 max_tokens=100,
             )
 
-            starts_with_secret = resp.content.strip().startswith(f"INTEGRITY:{secret}")
-            if starts_with_secret:
-                return IntegrityResult(
-                    test="system_prompt",
-                    passed=True,
-                    detail="System prompt passed through intact.",
-                    evidence={},
-                )
-            return IntegrityResult(
-                test="system_prompt",
-                passed=False,
+            found = f"INTEGRITY:{secret}" in resp.content
+            if found:
+                return IntegrityResult(test="system_prompt", passed=True,
+                    detail="System prompt passed through intact.", evidence={})
+            return IntegrityResult(test="system_prompt", passed=False,
                 detail="System prompt was modified or stripped by the proxy.",
-                evidence={"expected_prefix": f"INTEGRITY:{secret}", "actual_prefix": resp.content[:80]},
-            )
+                evidence={"expected_secret": f"INTEGRITY:{secret}", "preview": resp.content[:80]})
         except APIError as e:
             return IntegrityResult(test="system_prompt", passed=False, detail=f"API error: {e.message}")

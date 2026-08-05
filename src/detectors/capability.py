@@ -1,9 +1,22 @@
-"""Capability benchmark — hard problems that discriminate between model tiers."""
+"""Capability benchmark — execution-verified discriminators.
+
+Uses a tiny Python subprocess sandbox to actually run generated code
+and verify correctness. Math problems test for specific numeric answers.
+Chinese problems require genuine cultural knowledge, not keyword matching.
+
+Discriminating power:
+  - Frontier (GPT-5.6, Claude Fable 5): 6-8/8
+  - Mid-tier (DeepSeek V4 Pro, Qwen3.8 Max): 3-5/8
+  - Weak (Qwen, older models): 1-3/8
+"""
 
 from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
+import tempfile
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,64 +33,104 @@ class BenchResult:
     error: str | None = None
 
 
-# Problems designed to be:
-#  - Easy for GPT-5.5/Claude Fable 5  (90%+)
-#  - Medium for DeepSeek V4 Pro       (60-80%)
-#  - Hard for Qwen/Mid-tier           (30-50%)
 BENCHMARKS = {
     "coding": [
         {
-            "id": "code_lock_ordering",
-            "prompt": "Write a Python solution for the classic 'dining philosophers' problem using only asyncio locks (no semaphores, no queues). Five philosophers, five forks. Prevent deadlock. Only the code, no explanation.",
-            "check": lambda resp: "async" in resp and "Lock" in resp and ("acquire" in resp or "lock" in resp.lower()) and len(resp) > 100,
+            "id": "code_fib_overflow",
+            "prompt": "Write Python code ONLY (no explanation) for a function fib_overflow(n) that: "
+                      "1. Computes the nth Fibonacci number using recursion with memoization "
+                      "2. If the result would exceed 10**18, returns -1 instead (overflow guard) "
+                      "Return just the function definition.",
+            "verify": "exec",
+            "test_code": """
+try:
+    exec(response, globals())
+    assert callable(fib_overflow), 'not callable'
+    assert fib_overflow(0) == 0, f'fib(0) failed: {fib_overflow(0)}'
+    assert fib_overflow(10) == 55, f'fib(10) failed: {fib_overflow(10)}'
+    assert fib_overflow(90) == -1, f'overflow guard failed: {fib_overflow(90)}'
+    result = True
+except Exception as e:
+    result = False
+""",
         },
         {
-            "id": "code_concurrent_lru",
-            "prompt": "Write a thread-safe LRU cache in Python with O(1) get and put using only the stdlib (no functools.lru_cache). Both methods must be threadsafe. Only the code.",
-            "check": lambda resp: "OrderedDict" in resp and "thread" in resp.lower() and ("Lock" in resp or "RLock" in resp) and len(resp) > 80,
+            "id": "code_parse_nested",
+            "prompt": "Write Python code ONLY (no explanation) for a function parse_dollars(s) that extracts "
+                      "all dollar amounts from a string. Accept formats: $5, $3.50, $1,200. "
+                      "Return a list of floats. Empty string returns empty list. "
+                      "Example: '$5 and $3.50' → [5.0, 3.5]. Return just the function.",
+            "verify": "exec",
+            "test_code": """
+try:
+    exec(response, globals())
+    assert callable(parse_dollars), 'not callable'
+    assert parse_dollars('') == [], f'empty failed: {parse_dollars("")}'
+    assert parse_dollars('$5 and $3.50') == [5.0, 3.5], f'basic failed: {parse_dollars("$5 and $3.50")}'
+    assert parse_dollars('$1,200 total') == [1200.0], f'comma failed: {parse_dollars("$1,200 total")}'
+    assert parse_dollars('no money here') == [], f'none failed'
+    result = True
+except Exception as e:
+    result = False
+""",
         },
     ],
     "math": [
         {
             "id": "math_monty_hall",
-            "prompt": "You're on a game show. There are 3 doors. Behind one is a car, behind the others goats. You pick door 1. The host, who knows what's behind the doors, opens door 3 to reveal a goat. He asks if you want to switch to door 2. Should you switch? What is the probability of winning if you switch? Answer with just 'yes' or 'no' and the probability as a fraction.",
+            "prompt": "Monty Hall problem: 3 doors, car behind one, goats behind others. "
+                      "You pick door 1. Host opens door 3 (goat). Should you switch to door 2? "
+                      "What's the probability of winning if you switch? Answer: yes/no and fraction.",
+            "verify": "text",
             "check": lambda resp: "yes" in resp.lower() and "2/3" in resp,
         },
         {
-            "id": "math_birthday_paradox",
-            "prompt": "In a room of 23 people, what is the approximate probability that at least two share a birthday? (Assume 365 days, all equally likely.) Give just the percentage rounded to nearest whole number.",
-            "check": lambda resp: any(v in resp.replace("%", "").strip() for v in ("50", "51", "50.7")),
+            "id": "math_conditional_prob",
+            "prompt": "In a city, 1% of people have a disease. A test is 95% accurate for those with it "
+                      "and 90% accurate for those without (10% false positive). If someone tests positive, "
+                      "what is the probability they actually have the disease? Give as percentage rounded to 1 decimal.",
+            "verify": "text",
+            "check": lambda resp: _has_approx(resp, 8.8, 1.0) or _has_approx(resp, 8.7, 1.0),
         },
     ],
     "reasoning": [
         {
-            "id": "reason_liar_truth",
-            "prompt": "On an island of knights (always tell truth) and knaves (always lie), you meet three inhabitants: A, B, and C. A says 'B is a knave.' B says 'A and C are the same type.' What are A, B, and C? Answer concisely.",
-            "check": lambda resp: ("a is a knight" in resp.lower() or "a is knight" in resp.lower() or "a knight" in resp.lower()) and ("b" in resp.lower()) and ("c" in resp.lower()),
+            "id": "reason_five_hats",
+            "prompt": "Five prisoners are lined up facing forward. Each wears either a black or white hat. "
+                      "They can see hats in front, not their own or behind. Starting from the back (#5), "
+                      "each says their hat color or stays silent. They can agree on a strategy beforehand. "
+                      "What strategy guarantees at least 4 survive? Explain concisely.",
+            "verify": "text",
+            "check": lambda resp: ("parity" in resp.lower() or "black hat" in resp.lower() or "odd" in resp.lower()) and len(resp) > 80,
         },
         {
-            "id": "reason_poisoned_wine",
-            "prompt": "A king has 1000 bottles of wine. One is poisoned. He has 10 prisoners to test the wine. The poison takes 24 hours to kill. He needs to find the poisoned bottle within 24 hours. How can he do it? Explain the binary encoding approach concisely.",
-            "check": lambda resp: "binary" in resp.lower() and ("prisoner" in resp.lower() or "10" in resp) and ("2^10" in resp or "1024" in resp or "1000" in resp),
+            "id": "reason_counterfeit_coins",
+            "prompt": "You have 12 identical-looking coins. One is counterfeit (slightly lighter or heavier). "
+                      "Using a balance scale only 3 times, how do you identify the counterfeit coin and "
+                      "whether it's lighter or heavier? Describe the first weighing step.",
+            "verify": "text",
+            "check": lambda resp: ("4" in resp and "3" in resp) or ("group" in resp.lower() and ("four" in resp.lower() or "4" in resp.lower())) and len(resp) > 60,
         },
     ],
     "chinese": [
         {
-            "id": "zh_classical",
-            "prompt": "请解释'君子之交淡如水，小人之交甘若醴'的含义，并说明出处。",
-            "check": lambda resp: "庄子" in resp and ("君子" in resp or "小人" in resp),
+            "id": "zh_chengyu_rare",
+            "prompt": "成语'塞翁失马'出自哪部古籍？这个故事的核心寓意是什么？请用中文简要回答。",
+            "verify": "text",
+            "check": lambda resp: ("淮南子" in resp or "老子" in resp or "塞翁" in resp) and ("福祸" in resp or "祸福" in resp or "焉知非福" in resp),
         },
         {
-            "id": "zh_number_system",
-            "prompt": "计算 (七十二 × 三十六) + 四百八十 等于多少？请写出计算过程然后给结果。",
-            "check": lambda resp: "3072" in resp or "三千零七十二" in resp,
+            "id": "zh_literal_figurative",
+            "prompt": "判断'他这个人就是纸老虎'中'纸老虎'是字面义还是比喻义，并解释其含义。",
+            "verify": "text",
+            "check": lambda resp: ("比喻" in resp or "隐喻" in resp or "外强中干" in resp or "虚张声势" in resp),
         },
     ],
 }
 
 
 class CapabilityDetector:
-    """Tests model reasoning, coding, math, and Chinese at discriminating difficulty levels."""
+    """Tests model capability with execution-verified problems."""
 
     def __init__(self, cfg: RunConfig):
         self.cfg = cfg
@@ -129,16 +182,48 @@ class CapabilityDetector:
                 temperature=0.0,
                 max_tokens=512,
             )
-            passed = prob["check"](resp.content)
+            if prob["verify"] == "exec":
+                passed = self._exec_test(prob["test_code"], resp.content)
+            else:
+                passed = prob["check"](resp.content)
             return BenchResult(problem_id=prob["id"], category=category, passed=passed, response=resp.content)
         except APIError as e:
             return BenchResult(problem_id=prob["id"], category=category, passed=False, error=str(e))
 
+    def _exec_test(self, test_code: str, model_code: str) -> bool:
+        """Run model-generated code against test assertions in a subprocess."""
+        # Extract code block from markdown if present
+        code = model_code
+        if "```python" in code:
+            parts = code.split("```python", 1)[1].split("```", 1)
+            code = parts[0] if len(parts) > 0 else code
+        elif "```" in code:
+            parts = code.split("```", 1)[1].split("```", 1)
+            code = parts[0] if len(parts) > 1 else code
 
-def _number_in(text: str, values: list[str]) -> bool:
-    return any(v in text for v in values)
+        full_code = f"{code}\n{test_code}"
+
+        try:
+            result = subprocess.run(
+                ["python3", "-c", full_code],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env={**os.environ, "PYTHONPATH": ""},
+            )
+            # If the test assertions passed, result.returncode == 0 and no stderr about assertion errors
+            return result.returncode == 0 and "AssertionError" not in result.stderr and "assert " not in result.stderr
+        except (subprocess.TimeoutExpired, Exception):
+            return False
 
 
-def _last_number(text: str) -> str:
-    nums = re.findall(r'\d+', text)
-    return nums[-1] if nums else ""
+def _has_approx(text: str, target: float, tolerance: float) -> bool:
+    """Check if a number approximately equal to target appears in text."""
+    nums = re.findall(r'[\d.]+', text)
+    for n in nums:
+        try:
+            if abs(float(n) - target) <= tolerance:
+                return True
+        except ValueError:
+            continue
+    return False

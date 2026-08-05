@@ -38,9 +38,9 @@ class TestParamIntegrity:
     @pytest.mark.asyncio
     async def test_system_prompt_passed(self, detector):
         async def chat(messages, **kw):
-            import re; m = re.search(r"'(INTEGRITY:[a-f0-9]+)'", messages[0]["content"])
-            secret = m.group(1) if m else "INTEGRITY:test"
-            return _resp(f"{secret} Hello!")
+            import re; m = re.search(r"INTEGRITY:([a-f0-9]+)", messages[0]["content"])
+            secret = m.group(1) if m else "test"
+            return _resp(f"INTEGRITY:{secret} Hello!")
         detector.client.chat = AsyncMock(side_effect=chat)
         r = await detector._check_system_prompt()
         assert r.passed is True

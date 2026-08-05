@@ -38,15 +38,13 @@ class APIFeaturesDetector:
     async def run(self) -> dict[str, Any]:
         features: list[FeatureResult] = []
 
-        features.append(await self._check_min_p())           # DeepSeek-only
-        features.append(await self._check_top_a())           # DeepSeek-only
-        features.append(await self._check_include_reasoning())  # DeepSeek/Qwen
-        features.append(await self._check_ptc())
-        features.append(await self._check_anthropic_compat())
-        features.append(await self._check_tool_call_format())
-        features.append(await self._check_reasoning_effort_param())
-        features.append(await self._check_stream_format())
-        features.append(await self._check_model_self_report())
+        # Parameter fingerprinting — the only reliable API-level signals
+        features.append(await self._check_min_p())              # DeepSeek-exclusive
+        features.append(await self._check_top_a())              # DeepSeek-exclusive
+        features.append(await self._check_include_reasoning())  # DeepSeek/Qwen vs GPT/Claude
+        features.append(await self._check_anthropic_compat())   # Claude/DeepSeek vs GPT
+        features.append(await self._check_tool_call_format())   # Tool call presence
+        features.append(await self._check_stream_format())      # Streaming capability
 
         detected = sum(1 for f in features if f.detected)
         hints: dict[str, int] = {}
@@ -110,30 +108,7 @@ class APIFeaturesDetector:
                 return FeatureResult(feature="include_reasoning", detected=False, detail="include_reasoning rejected (likely GPT/Claude)", model_hint="gpt-5.x/claude")
             return FeatureResult(feature="include_reasoning", detected=True, detail=f"Accepted", model_hint="deepseek/qwen")
 
-    # ── individual checks ───────────────────────────────────────
-
-    async def _check_ptc(self) -> FeatureResult:
-        """Check for Programmatic Tool Calling (GPT-5.6 exclusive)."""
-        try:
-            resp = await self.client.chat(
-                messages=[{
-                    "role": "user",
-                    "content": "Write a Python program that calculates factorial of 5 and return the result.",
-                }],
-                model=self.cfg.model,
-                temperature=0.0,
-                max_tokens=200,
-                extra_body={"tools": [{"type": "code_interpreter"}]},
-            )
-            # If the model understands code_interpreter tool, it's likely GPT-5.6
-            raw = resp.raw or {}
-            if "code_interpreter" in str(raw).lower() or "python" in resp.content.lower():
-                return FeatureResult(feature="ptc", detected=True, detail="Model responds to code_interpreter tool.", model_hint="gpt-5.6")
-            return FeatureResult(feature="ptc", detected=False, detail="No PTC evidence.", model_hint="not-gpt-5.6")
-        except APIError:
-            return FeatureResult(feature="ptc", detected=False, detail="API does not support code_interpreter tool.", model_hint="not-gpt-5.6")
-
-    async def _check_anthropic_compat(self) -> FeatureResult:
+    # ── anthropic compat ────────────────────────────────────────
         """Check if the endpoint accepts Anthropic-format requests."""
         try:
             anthropic_client = APIClient(
@@ -194,23 +169,6 @@ class APIFeaturesDetector:
         except APIError:
             return FeatureResult(feature="tool_call_format", detected=False, detail="Tool calling not supported.", model_hint="")
 
-    async def _check_reasoning_effort_param(self) -> FeatureResult:
-        """Check if the endpoint respects the reasoning_effort parameter."""
-        try:
-            resp = await self.client.chat(
-                messages=[{"role": "user", "content": "1+1=?"}],
-                model=self.cfg.model,
-                temperature=0.0,
-                max_tokens=200,
-                reasoning_effort="low",
-            )
-            # reasoning_effort is supported by GPT-5.x, DeepSeek V4, and Qwen3.8
-            return FeatureResult(feature="reasoning_effort", detected=True, detail="Endpoint accepted reasoning_effort.", model_hint="")
-        except APIError as e:
-            if _is_unknown_param_error(e.message, "reasoning_effort"):
-                return FeatureResult(feature="reasoning_effort", detected=False, detail="reasoning_effort rejected.", model_hint="")
-            return FeatureResult(feature="reasoning_effort", detected=False, detail=f"API error: {e.message}", model_hint="")
-
     async def _check_stream_format(self) -> FeatureResult:
         """Check streaming SSE format characteristics."""
         try:
@@ -230,35 +188,6 @@ class APIFeaturesDetector:
             return FeatureResult(feature="stream_format", detected=False, detail="No streaming chunks received.", model_hint="")
         except APIError:
             return FeatureResult(feature="stream_format", detected=False, detail="Streaming not supported.", model_hint="")
-
-    async def _check_model_self_report(self) -> FeatureResult:
-        """Ask the model to identify itself — unreliable but informative."""
-        try:
-            resp = await self.client.chat(
-                messages=[{
-                    "role": "system",
-                    "content": "Reply only with the exact model name and version. No other text.",
-                }, {
-                    "role": "user",
-                    "content": "What model are you?",
-                }],
-                model=self.cfg.model,
-                temperature=0.0,
-                max_tokens=50,
-            )
-            content = resp.content.strip().lower()
-            hints: dict[str, str] = {
-                "gpt": "gpt-5.6",
-                "claude": "claude",
-                "deepseek": "deepseek",
-                "qwen": "qwen",
-            }
-            for key, hint in hints.items():
-                if key in content:
-                    return FeatureResult(feature="self_report", detected=True, detail=f"Self-reports as '{content[:60]}'", model_hint=hint)
-            return FeatureResult(feature="self_report", detected=False, detail=f"No clear self-identification: '{content[:60]}'", model_hint="")
-        except APIError:
-            return FeatureResult(feature="self_report", detected=False, detail="API error.", model_hint="")
 
 
 def _is_unknown_param_error(error_msg: str, param_name: str) -> bool:

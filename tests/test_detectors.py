@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from src.config import RunConfig
-from src.detectors.capability import CapabilityDetector, _number_in, _last_number
+from src.detectors.capability import CapabilityDetector, _has_approx
 from src.detectors.mixed_routing import MixedRoutingDetector
 from src.utils.api_client import ChatResponse, TokenUsage
 
@@ -19,13 +19,10 @@ def _cfg():
 
 
 class TestCapability:
-    def test_number_in(self):
-        assert _number_in("answer is 13", ["13", "14"])
-        assert not _number_in("answer is 7", ["13", "14"])
-
-    def test_last_number(self):
-        assert _last_number("the answer is 13") == "13"
-        assert _last_number("step: 5 then 9") == "9"
+    def test_has_approx(self):
+        assert _has_approx("answer is 8.8%", 8.8, 1.0)
+        assert _has_approx("about 9 percent", 8.8, 1.0)
+        assert not _has_approx("answer is 50", 8.8, 1.0)
 
     @pytest.mark.asyncio
     async def test_all_correct(self):
@@ -33,22 +30,22 @@ class TestCapability:
 
         async def smart_chat(**kw):
             content = str(kw.get("messages", [{}])[-1].get("content", ""))
-            if "dining philosophers" in content.lower():
-                return _resp("import asyncio\nforks = [asyncio.Lock() for _ in range(5)]\nasync def philosopher(i):\n  while True:\n    async with forks[i]:\n      async with forks[(i+1)%5]:\n        pass")
-            if "LRU" in content or "lru" in content:
-                return _resp("from collections import OrderedDict\nimport threading\nclass LRUCache:\n  def __init__(self, capacity):\n    self.cache = OrderedDict()\n    self.lock = threading.Lock()")
-            if "Monty Hall" in content.lower() or "game show" in content.lower():
+            if "fib_overflow" in content.lower() or "Fibonacci" in content:
+                return _resp("def fib_overflow(n, memo={}):\n  if n in memo: return memo[n]\n  if n<=1: return n\n  result = fib_overflow(n-1)+fib_overflow(n-2)\n  if result > 10**18: return -1\n  memo[n]=result\n  return result")
+            if "parse_dollars" in content.lower() or "dollar amounts" in content:
+                return _resp("import re\ndef parse_dollars(s):\n  return [float(m.replace('$','').replace(',','')) for m in re.findall(r'\\\\$[\\\\d,.]+', s)]")
+            if "Monty Hall" in content.lower() or "3 doors" in content.lower():
                 return _resp("yes, 2/3")
-            if "birthday" in content.lower() and "23" in content:
-                return _resp("50%")
-            if "knights" in content.lower() and "A" in content and "B" in content:
-                return _resp("A is a knight, B is a knave, C is a knight")
-            if "poisoned" in content.lower() or "binary" in content.lower():
-                return _resp("Binary encoding: number bottles 0-999, use 10 prisoners as bits. Since 2^10 = 1024 > 1000...")
-            if "君子之交" in content or "淡如水" in content:
-                return _resp("出自庄子。君子之交淡如水，小人之交甘若醴...")
-            if "七十二" in content or "三十六" in content:
-                return _resp("72 × 36 = 2592, + 480 = 3072")
+            if "disease" in content.lower() and "1%" in content:
+                return _resp("8.8%")
+            if ("hats" in content.lower() and "prisoner" in content.lower()) or "five prisoners" in content.lower():
+                return _resp("Parity strategy: the last prisoner says the parity of black hats. Others deduce from this.")
+            if "counterfeit" in content.lower() or "12 identical" in content.lower():
+                return _resp("Weigh 4 vs 4 first. If equal, counterfeit is in remaining 4.")
+            if "塞翁失马" in content:
+                return _resp("出自《淮南子·人间训》，寓意福祸相依。")
+            if "纸老虎" in content:
+                return _resp("比喻义。形容外强中干的人或事物。")
             return _resp("OK")
 
         detector.client.chat = AsyncMock(side_effect=smart_chat)

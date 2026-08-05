@@ -1,7 +1,8 @@
 """API feature detection — identifies model via protocol-level characteristics.
 
-Checks: Programmatic Tool Calling support, Anthropic API compatibility,
-tool call format, streaming format, reasoning effort parameter support.
+Checks: unique API parameters (min_p, top_a: DeepSeek-only),
+Programmatic Tool Calling, Anthropic compatibility, tool call format,
+streaming format, reasoning effort support.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ class FeatureResult:
     feature: str
     detected: bool
     detail: str
-    model_hint: str = ""  # Which model(s) this feature points to
+    model_hint: str = ""
 
 
 class APIFeaturesDetector:
@@ -35,9 +36,11 @@ class APIFeaturesDetector:
         )
 
     async def run(self) -> dict[str, Any]:
-        """Run all feature checks."""
         features: list[FeatureResult] = []
 
+        features.append(await self._check_min_p())           # DeepSeek-only
+        features.append(await self._check_top_a())           # DeepSeek-only
+        features.append(await self._check_include_reasoning())  # DeepSeek/Qwen
         features.append(await self._check_ptc())
         features.append(await self._check_anthropic_compat())
         features.append(await self._check_tool_call_format())
@@ -46,13 +49,10 @@ class APIFeaturesDetector:
         features.append(await self._check_model_self_report())
 
         detected = sum(1 for f in features if f.detected)
-
-        # Build model hints
         hints: dict[str, int] = {}
         for f in features:
             if f.model_hint:
                 hints[f.model_hint] = hints.get(f.model_hint, 0) + 1
-
         best_guess = max(hints, key=hints.get) if hints else "unknown"
 
         return {
@@ -65,6 +65,50 @@ class APIFeaturesDetector:
                 for f in features
             ],
         }
+
+    # ── new: parameter-based fingerprint (Aug 2026) ──────────────
+
+    async def _check_min_p(self) -> FeatureResult:
+        """min_p is exclusive to DeepSeek V4 — not supported by GPT or Claude."""
+        try:
+            resp = await self.client.chat(
+                messages=[{"role": "user", "content": "say ok"}],
+                model=self.cfg.model, temperature=1.0, max_tokens=10,
+                extra_body={"min_p": 0.05},
+            )
+            return FeatureResult(feature="min_p", detected=True, detail="min_p parameter accepted — DeepSeek signature.", model_hint="deepseek")
+        except APIError as e:
+            if "min_p" in str(e).lower() or "unknown" in str(e).lower() or "unrecognized" in str(e).lower():
+                return FeatureResult(feature="min_p", detected=False, detail="min_p rejected (not DeepSeek)", model_hint="gpt-5.x/claude")
+            return FeatureResult(feature="min_p", detected=True, detail=f"Accepted (or other error: {e.message[:60]})", model_hint="deepseek")
+
+    async def _check_top_a(self) -> FeatureResult:
+        """top_a is exclusive to DeepSeek V4."""
+        try:
+            resp = await self.client.chat(
+                messages=[{"role": "user", "content": "say ok"}],
+                model=self.cfg.model, temperature=1.0, max_tokens=10,
+                extra_body={"top_a": 0.5},
+            )
+            return FeatureResult(feature="top_a", detected=True, detail="top_a parameter accepted — DeepSeek signature.", model_hint="deepseek")
+        except APIError as e:
+            if "top_a" in str(e).lower() or "unknown" in str(e).lower() or "unrecognized" in str(e).lower():
+                return FeatureResult(feature="top_a", detected=False, detail="top_a rejected (not DeepSeek)", model_hint="gpt-5.x/claude")
+            return FeatureResult(feature="top_a", detected=True, detail=f"Accepted", model_hint="deepseek")
+
+    async def _check_include_reasoning(self) -> FeatureResult:
+        """include_reasoning is supported by DeepSeek V4 and Qwen3.8, not GPT/Claude."""
+        try:
+            resp = await self.client.chat(
+                messages=[{"role": "user", "content": "1+1=?"}],
+                model=self.cfg.model, temperature=0.0, max_tokens=50,
+                extra_body={"include_reasoning": True},
+            )
+            return FeatureResult(feature="include_reasoning", detected=True, detail="include_reasoning accepted — DeepSeek or Qwen.", model_hint="deepseek/qwen")
+        except APIError as e:
+            if "include_reasoning" in str(e).lower() or "unknown" in str(e).lower():
+                return FeatureResult(feature="include_reasoning", detected=False, detail="include_reasoning rejected (likely GPT/Claude)", model_hint="gpt-5.x/claude")
+            return FeatureResult(feature="include_reasoning", detected=True, detail=f"Accepted", model_hint="deepseek/qwen")
 
     # ── individual checks ───────────────────────────────────────
 

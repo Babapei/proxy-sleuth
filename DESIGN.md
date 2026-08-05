@@ -867,8 +867,26 @@ User Input (endpoint, claimed_model, api_key)
 |------|----------|
 | Claude Opus 5 | $5/$25 定价, 比 Fable 5 更少的安全分类器拦截(~85% less) |
 | Kimi K3 | 阿里 DashScope 协议, Anthropic 格式兼容 |
-| Qwen3.8 Max | 阿里 DashScope, 中文原生优化 |
+| Qwen3.8 Max | 阿里 DashScope, 中文原生优化, 支持 include_reasoning |
 | GLM-5.2 | Z.ai API 格式, Anthropic 兼容 |
+
+### API 参数指纹（关键突破 ⭐）
+
+基于 OpenRouter 模型元数据，发现各模型接受的**独有 API 参数**：
+
+| 参数 | GPT-5.6 | Claude | DeepSeek V4 | Qwen3.8 | 区分价值 |
+|------|:---:|:---:|:---:|:---:|------|
+| `min_p` | ❌ | ❌ | ✅ | ❌ | DeepSeek 独有签名 |
+| `top_a` | ❌ | ❌ | ✅ | ❌ | DeepSeek 独有签名 |
+| `include_reasoning` | ❌ | ❌ | ✅ | ✅ | GPT/Claude vs 国产 |
+| `frequency_penalty` | ❌ | ❌ | ❌ | ✅ | Qwen 独有 |
+| `repetition_penalty` | ❌ | ❌ | ✅ | ❌ | DeepSeek 独有 |
+| `logit_bias` | ❌ | ❌ | ✅ | ❌ | DeepSeek 独有 |
+| `reasoning_effort` | ✅ | ❌ | ✅ | ✅ | **不再独有！** |
+
+**重要修正**：之前认为 `reasoning_effort` 是 GPT 独有参数，但 DeepSeek V4 和 Qwen3.8 都支持它。已更新检测逻辑。
+
+发送 `min_p` 或 `top_a` → 如果接受，模式是 DeepSeek V4。这是最硬证据之一，比能力测试更可靠。
 
 ### 竞争态势
 

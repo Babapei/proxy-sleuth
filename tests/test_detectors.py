@@ -33,22 +33,22 @@ class TestCapability:
 
         async def smart_chat(**kw):
             content = str(kw.get("messages", [{}])[-1].get("content", ""))
-            if "fibonacci" in content.lower():
-                return _resp("def fib(n): return n if n<=1 else fib(n-1)+fib(n-2)")
-            if "right triangle" in content.lower():
-                return _resp("13")
-            if "probability" in content.lower():
-                return _resp("3/28")
-            if "画蛇添足" in content:
-                return _resp("画蛇添足意思是做了多余的事。")
-            if "床前明月光" in content:
-                return _resp("疑是地上霜。李白。")
-            if "7^100 mod 13" in content:
-                return _resp("9")
-            if "knights" in content.lower():
-                return _resp("A is a knave, B is a knight.")
-            if "5L jug" in content.lower():
-                return _resp("Fill 5L, pour into 3L... get 4L.")
+            if "dining philosophers" in content.lower():
+                return _resp("import asyncio\nforks = [asyncio.Lock() for _ in range(5)]\nasync def philosopher(i):\n  while True:\n    async with forks[i]:\n      async with forks[(i+1)%5]:\n        pass")
+            if "LRU" in content or "lru" in content:
+                return _resp("from collections import OrderedDict\nimport threading\nclass LRUCache:\n  def __init__(self, capacity):\n    self.cache = OrderedDict()\n    self.lock = threading.Lock()")
+            if "Monty Hall" in content.lower() or "game show" in content.lower():
+                return _resp("yes, 2/3")
+            if "birthday" in content.lower() and "23" in content:
+                return _resp("50%")
+            if "knights" in content.lower() and "A" in content and "B" in content:
+                return _resp("A is a knight, B is a knave, C is a knight")
+            if "poisoned" in content.lower() or "binary" in content.lower():
+                return _resp("Binary encoding: number bottles 0-999, use 10 prisoners as bits. Since 2^10 = 1024 > 1000...")
+            if "君子之交" in content or "淡如水" in content:
+                return _resp("出自庄子。君子之交淡如水，小人之交甘若醴...")
+            if "七十二" in content or "三十六" in content:
+                return _resp("72 × 36 = 2592, + 480 = 3072")
             return _resp("OK")
 
         detector.client.chat = AsyncMock(side_effect=smart_chat)

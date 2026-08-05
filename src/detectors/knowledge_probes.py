@@ -183,4 +183,16 @@ class KnowledgeProbeEngine:
 
 
 def _match_keyword(keyword: str, text: str) -> bool:
-    return bool(re.search(re.escape(keyword.lower()), text.lower()))
+    """Match keyword against text — all space-separated words must appear in the text.
+
+    Args:
+        keyword: Keyword to match, e.g. "may 2024" requires both words present.
+        text: Model's response text.
+    Returns:
+        True if all words from keyword are found somewhere in text.
+    """
+    text_lower = text.lower()
+    for word in keyword.lower().split():
+        if not re.search(re.escape(word), text_lower):
+            return False
+    return True

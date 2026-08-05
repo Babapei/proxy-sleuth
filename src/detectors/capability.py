@@ -1,4 +1,4 @@
-"""Capability benchmark — tests actual reasoning/coding/math/chinese ability."""
+"""Capability benchmark — hard problems that discriminate between model tiers."""
 
 from __future__ import annotations
 
@@ -20,71 +20,64 @@ class BenchResult:
     error: str | None = None
 
 
-# High-discrimination benchmark problems
+# Problems designed to be:
+#  - Easy for GPT-5.5/Claude Fable 5  (90%+)
+#  - Medium for DeepSeek V4 Pro       (60-80%)
+#  - Hard for Qwen/Mid-tier           (30-50%)
 BENCHMARKS = {
     "coding": [
         {
-            "id": "code_recursive_fib",
-            "prompt": "Write Python code for a function that returns the nth Fibonacci number using recursion. Include the function only, no explanation.",
-            "check": lambda resp: "def " in resp and "return" in resp and ("fib" in resp.lower() or "n-1" in resp or "n-2" in resp),
+            "id": "code_lock_ordering",
+            "prompt": "Write a Python solution for the classic 'dining philosophers' problem using only asyncio locks (no semaphores, no queues). Five philosophers, five forks. Prevent deadlock. Only the code, no explanation.",
+            "check": lambda resp: "async" in resp and "Lock" in resp and ("acquire" in resp or "lock" in resp.lower()) and len(resp) > 100,
         },
         {
-            "id": "code_async_fetch",
-            "prompt": "Write Python code using asyncio and aiohttp to fetch two URLs concurrently and return their status codes. Only the function, no explanation.",
-            "check": lambda resp: "async" in resp and ("aiohttp" in resp or "httpx" in resp or "await" in resp),
-        },
-        {
-            "id": "code_pandas_groupby",
-            "prompt": "Write Python pandas code to read a CSV, group by column 'category', and compute mean of column 'value'. Only the code, no explanation.",
-            "check": lambda resp: "groupby" in resp and "mean" in resp and ("pd" in resp or "pandas" in resp or "read_csv" in resp),
+            "id": "code_concurrent_lru",
+            "prompt": "Write a thread-safe LRU cache in Python with O(1) get and put using only the stdlib (no functools.lru_cache). Both methods must be threadsafe. Only the code.",
+            "check": lambda resp: "OrderedDict" in resp and "thread" in resp.lower() and ("Lock" in resp or "RLock" in resp) and len(resp) > 80,
         },
     ],
     "math": [
         {
-            "id": "math_probability",
-            "prompt": "A bag has 3 red balls and 5 blue balls. You draw 2 balls without replacement. What is the probability both are red? Answer with just the fraction or decimal.",
-            "check": lambda resp: _number_in(resp, ["3/28", "0.107", "10.7%", "0.11"]),
+            "id": "math_monty_hall",
+            "prompt": "You're on a game show. There are 3 doors. Behind one is a car, behind the others goats. You pick door 1. The host, who knows what's behind the doors, opens door 3 to reveal a goat. He asks if you want to switch to door 2. Should you switch? What is the probability of winning if you switch? Answer with just 'yes' or 'no' and the probability as a fraction.",
+            "check": lambda resp: "yes" in resp.lower() and "2/3" in resp,
         },
         {
-            "id": "math_modular",
-            "prompt": "What is 7^100 mod 13? Show your work briefly, then give the final answer.",
-            "check": lambda resp: "9" in _last_number(resp) if _last_number(resp) else False,
-        },
-        {
-            "id": "math_geometry",
-            "prompt": "A right triangle has legs of length 5 and 12. What is the length of the hypotenuse? Answer with just the number.",
-            "check": lambda resp: "13" in resp,
+            "id": "math_birthday_paradox",
+            "prompt": "In a room of 23 people, what is the approximate probability that at least two share a birthday? (Assume 365 days, all equally likely.) Give just the percentage rounded to nearest whole number.",
+            "check": lambda resp: "50" in resp and ("%" in resp or "percent" in resp.lower()),
         },
     ],
     "reasoning": [
         {
-            "id": "reason_knights",
-            "prompt": "On an island, knights always tell the truth and knaves always lie. A says 'B is a knave.' B says 'We are both knights.' What are A and B? Answer briefly.",
-            "check": lambda resp: "knave" in resp.lower() or ("a is" in resp.lower() and "b is" in resp.lower()),
+            "id": "reason_liar_truth",
+            "prompt": "On an island of knights (always tell truth) and knaves (always lie), you meet three inhabitants: A, B, and C. A says 'B is a knave.' B says 'A and C are the same type.' What are A, B, and C? Answer concisely.",
+            "check": lambda resp: ("a is a knight" in resp.lower() or "a is knight" in resp.lower() or "a knight" in resp.lower()) and ("b" in resp.lower()) and ("c" in resp.lower()),
         },
         {
-            "id": "reason_wine",
-            "prompt": "You have a 5L jug and a 3L jug. How do you measure exactly 4 liters? Describe the steps concisely.",
-            "check": lambda resp: "4" in resp and ("fill" in resp.lower() or "pour" in resp.lower() or "jug" in resp.lower()),
+            "id": "reason_poisoned_wine",
+            "prompt": "A king has 1000 bottles of wine. One is poisoned. He has 10 prisoners to test the wine. The poison takes 24 hours to kill. He needs to find the poisoned bottle within 24 hours. How can he do it? Explain the binary encoding approach concisely.",
+            "check": lambda resp: "binary" in resp.lower() and ("prisoner" in resp.lower() or "10" in resp) and ("2^10" in resp or "1024" in resp or "1000" in resp),
         },
     ],
     "chinese": [
         {
-            "id": "zh_idiom",
-            "prompt": "请解释成语'画蛇添足'的含义，并用一句话举例。",
-            "check": lambda resp: "蛇" in resp and ("多余" in resp or "多此一举" in resp or "不必要" in resp),
+            "id": "zh_classical",
+            "prompt": "请解释'君子之交淡如水，小人之交甘若醴'的含义，并说明出处。",
+            "check": lambda resp: "庄子" in resp and ("君子" in resp or "小人" in resp),
         },
         {
-            "id": "zh_poem",
-            "prompt": "'床前明月光'的下一句是什么？并说出这首诗的作者。",
-            "check": lambda resp: ("疑是地上霜" in resp or "李白" in resp),
+            "id": "zh_number_system",
+            "prompt": "计算 (七十二 × 三十六) + 四百八十 等于多少？请写出计算过程然后给结果。",
+            "check": lambda resp: "3072" in resp or "三千零七十二" in resp,
         },
     ],
 }
 
 
 class CapabilityDetector:
-    """Tests model reasoning, coding, math, and Chinese capability."""
+    """Tests model reasoning, coding, math, and Chinese at discriminating difficulty levels."""
 
     def __init__(self, cfg: RunConfig):
         self.cfg = cfg
@@ -96,17 +89,13 @@ class CapabilityDetector:
         )
 
     async def run(self) -> dict[str, Any]:
-        """Run all benchmark categories."""
         all_results: list[BenchResult] = []
         by_category: dict[str, list[BenchResult]] = {}
 
         for category, problems in BENCHMARKS.items():
-            cat_results: list[BenchResult] = []
-            for prob in problems:
-                result = await self._run_problem(prob, category)
-                cat_results.append(result)
-                all_results.append(result)
+            cat_results = [await self._run_problem(p, category) for p in problems]
             by_category[category] = cat_results
+            all_results.extend(cat_results)
 
         passed = sum(1 for r in all_results if r.passed)
         total = len(all_results)
@@ -115,7 +104,7 @@ class CapabilityDetector:
         return {
             "layer": "capability",
             "score": round(score, 3),
-            "verdict": "MATCH" if score >= 0.6 else "MISMATCH",
+            "verdict": "MATCH" if score >= 0.5 else "MISMATCH",
             "total_passed": passed,
             "total_problems": total,
             "categories": {

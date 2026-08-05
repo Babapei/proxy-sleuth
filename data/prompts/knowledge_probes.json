@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "updated": "2026-08-04",
-  "description": "Knowledge boundary probes for model identification. Each probe targets events at specific dates to distinguish models by their training cutoff.",
+  "description": "Knowledge boundary probes — split-word keyword matching.",
   "probe_groups": {
     "gpt56_only": {
       "description": "Events only GPT-5.6+ models should know (post June 2026)",
@@ -10,37 +10,37 @@
         {
           "id": "gpt56_pricing",
           "question": "What is the pricing per million tokens for OpenAI's GPT-5.6 Sol model? Give the input and output prices.",
-          "keywords": ["$5", "$30", "sol"],
+          "keywords": ["sol", "5 30", "dollar"],
           "weight": 1.0
         },
         {
           "id": "gpt56_family",
           "question": "OpenAI recently released a family of models with celestial body names. What are the three model names in the GPT-5.6 series?",
-          "keywords": ["sol", "terra", "luna"],
+          "keywords": ["sol terra luna", "sol"],
           "weight": 1.0
         },
         {
           "id": "gpt56_ultra",
           "question": "What is the 'ultra' mode in GPT-5.6? How many agents does it coordinate by default and what does it do?",
-          "keywords": ["ultra", "agent", "parallel", "4", "four"],
+          "keywords": ["ultra", "parallel agent", "reasoning effort"],
           "weight": 0.8
         },
         {
           "id": "gpt56_ptc",
           "question": "What is 'Programmatic Tool Calling', which model introduced it, and how does it work?",
-          "keywords": ["programmatic tool calling", "gpt-5.6", "program", "code"],
+          "keywords": ["programmatic tool calling", "gpt-5.6", "write program", "coordinate tool"],
           "weight": 1.0
         },
         {
           "id": "gpt56_july_cut",
-          "question": "On July 30, 2026, OpenAI announced price cuts. Which GPT-5.6 models were affected and by what percentage?",
-          "keywords": ["luna", "80%", "terra", "20%", "july 30"],
+          "question": "On July 30 2026, OpenAI announced price cuts. Which GPT-5.6 models were affected and by what percentage?",
+          "keywords": ["luna 80", "terra 20", "july 30"],
           "weight": 0.8
         },
         {
           "id": "gpt56_coding_index",
           "question": "What score did GPT-5.6 Sol achieve on the Artificial Analysis Coding Agent Index?",
-          "keywords": ["80", "coding agent"],
+          "keywords": ["coding agent index", "80"],
           "weight": 0.5
         }
       ]
@@ -52,31 +52,31 @@
         {
           "id": "fable5_launch",
           "question": "When was Claude Fable 5 released and what company created it? Give the exact date if possible.",
-          "keywords": ["june", "2026", "anthropic", "fable 5", "june 9"],
+          "keywords": ["june 2026", "anthropic", "fable"],
           "weight": 1.0
         },
         {
           "id": "fable5_safeguards",
           "question": "What happens when Claude Fable 5's safety classifiers detect a sensitive request? What model does it fall back to?",
-          "keywords": ["opus 4.8", "fallback", "classifier", "safeguard"],
+          "keywords": ["opus 4.8", "fallback", "safety classifier", "safeguard"],
           "weight": 1.0
         },
         {
           "id": "fable5_mythos",
           "question": "What is the relationship between Claude Fable 5 and Claude Mythos 5? How do they differ?",
-          "keywords": ["same model", "safeguard", "mythos", "fable"],
+          "keywords": ["mythos", "fable", "same model", "safeguard"],
           "weight": 0.8
         },
         {
           "id": "fable5_pricing",
           "question": "What is the pricing for Claude Fable 5 per million tokens?",
-          "keywords": ["$10", "$50", "input", "output"],
+          "keywords": ["10 50", "fable", "million"],
           "weight": 1.0
         },
         {
           "id": "fable5_swebench",
           "question": "What score did Claude Fable 5 achieve on SWE-Bench Pro?",
-          "keywords": ["80%", "swe-bench", "80"],
+          "keywords": ["swe-bench", "80", "fable"],
           "weight": 0.5
         }
       ]
@@ -88,25 +88,25 @@
         {
           "id": "deepseek_v4_release",
           "question": "When was DeepSeek V4 released and what are the two variants available?",
-          "keywords": ["july", "2026", "flash", "pro", "v4"],
+          "keywords": ["v4", "flash pro", "deepseek"],
           "weight": 1.0
         },
         {
           "id": "deepseek_v4_pricing",
           "question": "What is the pricing for DeepSeek V4 Flash per million input and output tokens?",
-          "keywords": ["$0.14", "$0.28", "flash"],
+          "keywords": ["flash", "0.14", "0.28", "deepseek"],
           "weight": 1.0
         },
         {
           "id": "deepseek_v4_context",
           "question": "What is the maximum context length of DeepSeek V4?",
-          "keywords": ["1m", "1 million", "1,000,000", "million tokens"],
+          "keywords": ["million", "context", "1M", "deepseek"],
           "weight": 0.8
         },
         {
           "id": "deepseek_peak_pricing",
-          "question": "DeepSeek recently announced a new peak/off-peak pricing policy. What are the peak hours and what's the price multiplier?",
-          "keywords": ["peak", "9:00", "2x", "double", "9-12", "14-18"],
+          "question": "DeepSeek recently announced a new peak/off-peak pricing policy. What are the peak hours and what's the multiplier?",
+          "keywords": ["peak", "2x", "deepseek", "beijing"],
           "weight": 0.8
         }
       ]
@@ -117,14 +117,14 @@
       "probes": [
         {
           "id": "gpt4o_launch",
-          "question": "When was GPT-4o first released by OpenAI?",
-          "keywords": ["may 2024", "2024"],
+          "question": "When was GPT-4o first released by OpenAI? Give month and year.",
+          "keywords": ["2024", "may", "openai", "gpt"],
           "weight": 0.8
         },
         {
           "id": "us_election_2024",
           "question": "Who won the 2024 United States presidential election?",
-          "keywords": ["trump", "donald trump"],
+          "keywords": ["trump", "2024", "election", "donald"],
           "weight": 0.5
         }
       ]

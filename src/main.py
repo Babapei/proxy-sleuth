@@ -27,7 +27,7 @@ def cli() -> None:
 @click.option("--api-key", "-k", envvar="PROXY_SLEUTH_KEY", help="API key (or set PROXY_SLEUTH_KEY env var)")
 @click.option("--model", "-m", required=True, help="Claimed model name (e.g. gpt-5.6-sol, claude-fable-5)")
 @click.option("--protocol", "-p", type=click.Choice(["openai", "anthropic"]), default="openai", help="API protocol")
-@click.option("--mode", type=click.Choice(["quick", "standard", "full", "knowledge", "params", "context", "routing", "features", "fingerprint"]), default="quick", help="Detection mode")
+@click.option("--mode", type=click.Choice(["quick", "standard", "full", "knowledge", "params", "context", "routing", "features", "fingerprint", "capability"]), default="quick", help="Detection mode")
 @click.option("--output", "-o", "output_format", type=click.Choice(["term", "json", "html"]), default="term", help="Output format")
 @click.option("--output-file", help="Save report to file")
 @click.option("--timeout", type=float, default=120.0, help="Request timeout in seconds")
@@ -115,7 +115,7 @@ def cccswitch() -> None:
 
 
 @cccswitch.command("test")
-@click.option("--mode", default="quick", type=click.Choice(["quick", "standard", "full", "knowledge", "params", "context", "routing", "features", "fingerprint"]), help="Detection mode")
+@click.option("--mode", default="quick", type=click.Choice(["quick", "standard", "full", "knowledge", "params", "context", "routing", "features", "fingerprint", "capability"]), help="Detection mode")
 @click.option("--output", "-o", "output_format", type=click.Choice(["term", "json"]), default="term")
 def cccswitch_test(mode: str, output_format: str) -> None:
     """Auto-discover and test the currently active cccswitch provider.
@@ -179,6 +179,7 @@ def _apply_mode_preset(cfg: RunConfig, mode: str) -> None:
         "routing":  [False, False, False, False, False, False, True],
         "features": [False, False, True, False, False, False, False],
         "fingerprint": [False, False, False, False, True, False, False],
+        "capability":  [False, False, False, False, False, True, False],
     }
     flags = presets.get(mode, presets["quick"])
     (cfg.run_params_integrity, cfg.run_context_truncation, cfg.run_api_features,

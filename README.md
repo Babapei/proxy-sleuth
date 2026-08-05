@@ -87,8 +87,10 @@ Verdict: MISMATCH — multi-layer evidence of model substitution
 
 ## Documentation
 
+- [Design Document](docs/DESIGN.md) — full architecture and design rationale
 - [Data Freshness Guide](docs/MAINTENANCE.md) — keeping probes and params up to date
-- [Design Document](DESIGN.md) — full architecture and design rationale
+- [Architecture & Contributing](docs/ARCHITECTURE.md) — project structure, adding new layers
+- [FAQ](docs/FAQ.md) — common questions and troubleshooting
 
 ## Tests
 

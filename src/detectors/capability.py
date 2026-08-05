@@ -126,6 +126,20 @@ except Exception as e:
             "check": lambda resp: ("比喻" in resp or "隐喻" in resp or "外强中干" in resp or "虚张声势" in resp),
         },
     ],
+    "extra_math": [
+        {
+            "id": "math_balls_prob",
+            "prompt": "A bag has 3 red balls and 5 blue balls. You draw 2 balls without replacement. What is the probability both are red? Answer with just the fraction.",
+            "verify": "text",
+            "check": lambda resp: "3/28" in resp or "0.107" in resp,
+        },
+        {
+            "id": "math_modular_exp",
+            "prompt": "What is 7^100 mod 13? Give the final answer only.",
+            "verify": "text",
+            "check": lambda resp: "9" in resp,
+        },
+    ],
 }
 
 

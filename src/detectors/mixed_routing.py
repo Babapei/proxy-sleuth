@@ -113,10 +113,10 @@ class MixedRoutingDetector:
         }
 
     async def _alternating_test(self) -> list[RoutingProbe]:
-        """Alternate 5 simple + 5 complex requests."""
+        """Alternate 3 simple + 3 complex requests."""
         results: list[RoutingProbe] = []
         alternating = []
-        for i in range(10):
+        for i in range(6):
             if i % 2 == 0:
                 alternating.append(("simple", SIMPLE_PROMPTS[i // 2]))
             else:

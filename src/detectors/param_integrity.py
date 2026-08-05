@@ -45,7 +45,7 @@ class ParamIntegrityDetector:
         results.append(await self._check_tools())
         results.append(await self._check_system_prompt())
 
-        if "gpt-5.6" in self.cfg.model.lower() or "gpt5" in self.cfg.model.lower():
+        if "gpt" in self.cfg.model.lower() and any(v in self.cfg.model for v in ("5.5", "5.6", "5.4")):
             results.append(await self._check_reasoning_effort())
 
         failed = [r for r in results if not r.passed]

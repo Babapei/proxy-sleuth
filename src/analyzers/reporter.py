@@ -125,6 +125,9 @@ class TerminalReporter:
                 detail = f"Best guess: {layer.get('best_model_guess', 'unknown')}"
             elif layer.get("layer") == "knowledge_probes":
                 detail = f"Groups: {len(layer.get('groups', []))}"
+            elif layer.get("layer") == "statistical":
+                jsd = layer.get("mean_jsd")
+                detail = f"JSD={jsd:.3f}" if jsd is not None else "—"
             elif layer.get("layer") == "capability":
                 detail = f"{layer.get('total_passed', 0)}/{layer.get('total_problems', 0)} problems passed"
             elif layer.get("layer") == "mixed_routing":

@@ -63,10 +63,18 @@ class NeedleResult:
 
 
 class ContextTruncationDetector:
-    """Tests whether proxy preserves context at realistic token depths."""
+    """Tests whether proxy preserves context at realistic token depths.
 
-    def __init__(self, cfg: RunConfig):
+    Default: ~25K tokens (200 rounds of realistic dialogue).
+    Deep mode: ~50K tokens (400 rounds) for detecting subtle truncation.
+    """
+
+    DEFAULT_ROUNDS = 200
+    DEEP_ROUNDS = 400
+
+    def __init__(self, cfg: RunConfig, deep: bool = False):
         self.cfg = cfg
+        self.deep = deep
         self.client = APIClient(
             base_url=cfg.endpoint,
             api_key=cfg.resolve_api_key(),
@@ -75,20 +83,16 @@ class ContextTruncationDetector:
         )
 
     async def run(self) -> dict[str, Any]:
-        """Test needle recall at key positions in a conversation.
-
-        Sends one conversation with ~200 rounds (≈8K tokens of realistic dialogue).
-        Needles are placed at position 10 (beginning), 100 (middle), 190 (near end).
-        Each is asked about separately after the full conversation.
-        """
+        """Test needle recall at key positions in a conversation."""
+        total_rounds = self.DEEP_ROUNDS if self.deep else self.DEFAULT_ROUNDS
         needle = f"NEEDLE_{secrets.token_hex(4).upper()}"
         positions = {
-            10: "beginning",
-            100: "middle", 
-            190: "end",
+            total_rounds // 20: "beginning",      # 5% into conversation
+            total_rounds // 2: "middle",          # 50% mark
+            int(total_rounds * 0.95): "end",       # 95% mark
         }
 
-        messages = self._build_conversation(200, needle, list(positions.keys()))
+        messages = self._build_conversation(total_rounds, needle, list(positions.keys()))
 
         results: list[NeedleResult] = []
         for pos, desc in positions.items():

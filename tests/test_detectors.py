@@ -30,10 +30,10 @@ class TestCapability:
 
         async def smart_chat(**kw):
             content = str(kw.get("messages", [{}])[-1].get("content", ""))
-            if "fib_overflow" in content.lower() or "Fibonacci" in content:
-                return _resp("def fib_overflow(n, memo={}):\n  if n in memo: return memo[n]\n  if n<=1: return n\n  result = fib_overflow(n-1)+fib_overflow(n-2)\n  if result > 10**18: return -1\n  memo[n]=result\n  return result")
-            if "parse_dollars" in content.lower() or "dollar amounts" in content:
-                return _resp("import re\ndef parse_dollars(s):\n  return [float(m.replace('$','').replace(',','')) for m in re.findall(r'\\\\$[\\\\d,.]+', s)]")
+            if "longest" in content.lower() or "Fibonacci" in content:
+                return _resp("def longest(n, memo={}):\n  if n in memo: return memo[n]\n  if n<=1: return n\n  result = fib_overflow(n-1)+fib_overflow(n-2)\n  if result > 10**18: return -1\n  memo[n]=result\n  return result")
+            if "binary search" in content.lower() or "dollar amounts" in content:
+                return _resp("import re\ndef binary search(s):\n  return [float(m.replace('$','').replace(',','')) for m in re.findall(r'\\\\$[\\\\d,.]+', s)]")
             if "Monty Hall" in content.lower() or "3 doors" in content.lower():
                 return _resp("yes, 2/3")
             if "disease" in content.lower() and "1%" in content:

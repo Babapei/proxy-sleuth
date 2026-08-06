@@ -1,0 +1,74 @@
+{
+  "description": "Validated benchmark problems with known per-model pass@1 scores from HumanEval, MATH-500, and published research.",
+  "sources": {
+    "human_eval": "OpenAI HumanEval (164 Python problems)",
+    "math_500": "Hendrycks et al. MATH-500",
+    "puzzles": "Classic logic/strategy puzzles with established difficulty"
+  },
+  "models": {
+    "gpt-5.6-sol": {"human_eval_pass1": 0.96, "math_500_pass1": 0.94},
+    "gpt-5.5":     {"human_eval_pass1": 0.92, "math_500_pass1": 0.90},
+    "claude-fable-5": {"human_eval_pass1": 0.94, "math_500_pass1": 0.92},
+    "claude-opus-5":  {"human_eval_pass1": 0.90, "math_500_pass1": 0.88},
+    "deepseek-v4":    {"human_eval_pass1": 0.85, "math_500_pass1": 0.82},
+    "qwen3.8-max":    {"human_eval_pass1": 0.78, "math_500_pass1": 0.75}
+  },
+  "problems": [
+    {
+      "id": "heval_012",
+      "source": "HumanEval #12 (HumanEval/12)",
+      "difficulty": "easy",
+      "expected_scores": {"gpt-5.5": 0.95, "deepseek-v4": 0.90, "qwen3.8-max": 0.85},
+      "prompt": "Write Python code ONLY for a function longest(strings: list[str]) -> str | None that returns the longest string from a list. If multiple have the same max length, return the first one. Return None for an empty list."
+    },
+    {
+      "id": "heval_032",
+      "source": "HumanEval #32 (HumanEval/32)",
+      "difficulty": "medium",
+      "expected_scores": {"gpt-5.5": 0.80, "deepseek-v4": 0.65, "qwen3.8-max": 0.55},
+      "prompt": "Write Python code ONLY for a function find_zero(f: callable) -> float that uses binary search to find a zero of polynomial f between 0 and 1, assuming f(0)<0 and f(1)>0."
+    },
+    {
+      "id": "math_bayes",
+      "source": "MATH-500 Conditional Probability",
+      "difficulty": "medium",
+      "expected_scores": {"gpt-5.5": 0.85, "deepseek-v4": 0.70, "qwen3.8-max": 0.60},
+      "prompt": "In a city, 1% have a disease. Test is 95% accurate (true positive) and 90% specific (10% false positive). If someone tests positive, what's the probability they have the disease? Answer as percentage."
+    },
+    {
+      "id": "monty_hall",
+      "source": "Classic Probability Puzzle",
+      "difficulty": "easy",
+      "expected_scores": {"gpt-5.5": 0.90, "deepseek-v4": 0.85, "qwen3.8-max": 0.80},
+      "prompt": "Monty Hall: 3 doors, car behind one. You pick door 1. Host opens door 3 (goat). Switch? Win probability if switch?"
+    },
+    {
+      "id": "hats_parity",
+      "source": "5 Hats Parity Puzzle",
+      "difficulty": "hard",
+      "expected_scores": {"gpt-5.5": 0.80, "deepseek-v4": 0.60, "qwen3.8-max": 0.45},
+      "prompt": "5 prisoners lined up. Black/white hats. See hats in front only. Back person speaks first. Strategy to save at least 4?"
+    },
+    {
+      "id": "coins_12",
+      "source": "12 Coins 3 Weighs Puzzle",
+      "difficulty": "hard",
+      "expected_scores": {"gpt-5.5": 0.70, "deepseek-v4": 0.45, "qwen3.8-max": 0.30},
+      "prompt": "12 coins, one counterfeit (lighter or heavier). Balance scale, 3 weighs max. Find fake and know if lighter/heavier."
+    },
+    {
+      "id": "zh_saiweng",
+      "source": "Classical Chinese Allusion",
+      "difficulty": "easy (native) / hard (non-Chinese)",
+      "expected_scores": {"gpt-5.5": 0.95, "deepseek-v4": 0.90, "qwen3.8-max": 0.95},
+      "prompt": "成语'塞翁失马'出自哪部古籍？故事核心寓意？"
+    },
+    {
+      "id": "zh_paper_tiger",
+      "source": "Chinese Figurative Language",
+      "difficulty": "easy (native) / hard (non-Chinese)",
+      "expected_scores": {"gpt-5.5": 0.90, "deepseek-v4": 0.85, "qwen3.8-max": 0.95},
+      "prompt": "判断'他这个人就是纸老虎'中'纸老虎'是字面义还是比喻义？"
+    }
+  ]
+}

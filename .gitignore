@@ -48,3 +48,6 @@ secrets/
 htmlcov/
 coverage.xml
 .coverage
+
+hf_cache/
+tmp/

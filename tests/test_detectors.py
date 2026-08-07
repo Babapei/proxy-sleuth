@@ -30,17 +30,21 @@ class TestCapability:
 
         async def smart_chat(**kw):
             content = str(kw.get("messages", [{}])[-1].get("content", ""))
-            if "longest" in content.lower() or "Fibonacci" in content:
-                return _resp("def longest(n, memo={}):\n  if n in memo: return memo[n]\n  if n<=1: return n\n  result = fib_overflow(n-1)+fib_overflow(n-2)\n  if result > 10**18: return -1\n  memo[n]=result\n  return result")
-            if "binary search" in content.lower() or "dollar amounts" in content:
-                return _resp("import re\ndef binary search(s):\n  return [float(m.replace('$','').replace(',','')) for m in re.findall(r'\\\\$[\\\\d,.]+', s)]")
-            if "Monty Hall" in content.lower() or "3 doors" in content.lower():
-                return _resp("yes, 2/3")
-            if "disease" in content.lower() and "1%" in content:
-                return _resp("8.8%")
-            if ("hats" in content.lower() and "prisoner" in content.lower()) or "five prisoners" in content.lower():
+            if "longest" in content:
+                return _resp("from typing import List, Optional\ndef longest(strings: List[str]) -> Optional[str]:\n  if not strings:\n    return None\n  maxlen = max(len(s) for s in strings)\n  for s in strings:\n    if len(s) == maxlen:\n      return s")
+            if "find_zero" in content:
+                return _resp("import math\ndef find_zero(xs):\n  begin, end = -1.0, 1.0\n  while poly(xs, begin) * poly(xs, end) > 0:\n    begin *= 2.0\n    end *= 2.0\n  while end - begin > 1e-10:\n    center = (begin + end) / 2.0\n    if poly(xs, center) * poly(xs, begin) > 0:\n      begin = center\n    else:\n      end = center\n  return (begin + end) / 2.0")
+            if "get_odd_collatz" in content:
+                return _resp("def get_odd_collatz(n):\n  odd = [n] if n%2 else []\n  while n > 1:\n    n = n//2 if n%2==0 else n*3+1\n    if n%2: odd.append(n)\n  odd.append(1)\n  return sorted(odd)")
+            if "divisors" in content and "196" in content:
+                return _resp("9")
+            if "multiple of 30" in content and "0 and 2" in content:
+                return _resp("2220")
+            if "proper divisors" in content and "284" in content:
+                return _resp("284")
+            if "hats" in content.lower() or "parity" in content.lower():
                 return _resp("Parity strategy: the last prisoner says the parity of black hats. Others deduce from this.")
-            if "counterfeit" in content.lower() or "12 identical" in content.lower():
+            if "counterfeit" in content.lower() or "12" in content and "coin" in content.lower():
                 return _resp("Weigh 4 vs 4 first. If equal, counterfeit is in remaining 4.")
             if "塞翁失马" in content:
                 return _resp("出自《淮南子·人间训》，寓意福祸相依。")

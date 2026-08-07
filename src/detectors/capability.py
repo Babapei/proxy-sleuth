@@ -113,30 +113,28 @@ BENCHMARKS = {
             ),
         },
     ],
-    # ── MATH-500 level probability problems ─────────────────────
+    # ── REAL MATH-500 problems (from HuggingFaceH4/MATH-500) ────
     "math": [
         {
-            "id": "math_bayes_disease",
-            "source": "MATH-500 Conditional Probability",
-            "prompt": (
-                "In a city, 1% of people have a disease. A test is 95% accurate for those with it "
-                "and 90% accurate for those without (10% false positive). If someone tests positive, "
-                "what is the probability they actually have the disease? Give as percentage rounded to 1 decimal."
-            ),
+            "id": "math500_number_theory_l3",
+            "source": "MATH-500 Number Theory Level 3",
+            "prompt": "How many positive whole-number divisors does 196 have?",
             "verify": "text",
-            "check": lambda resp: _has_approx(resp, 8.8, 1.0) or _has_approx(resp, 8.7, 1.0),
+            "check": lambda resp: "9" in resp and not any(n in resp for n in ("19","29","39","49","59","69","79","89","90","91","92","93","94","95","96","97","98","99")),
         },
         {
-            "id": "math_monty_hall",
-            "source": "Classic Monty Hall Problem",
-            "prompt": (
-                "Monty Hall: 3 doors, one car two goats. You pick door 1. "
-                "Host (knowing where the car is) opens door 3 revealing a goat. "
-                "Should you switch to door 2? What is the probability of winning if you switch? "
-                "Answer: yes/no and fraction."
-            ),
+            "id": "math500_number_theory_l3b",
+            "source": "MATH-500 Number Theory Level 3",
+            "prompt": "What is the least positive integer multiple of 30 that can be written with only the digits 0 and 2?",
             "verify": "text",
-            "check": lambda resp: "yes" in resp.lower() and "2/3" in resp,
+            "check": lambda resp: "2220" in resp,
+        },
+        {
+            "id": "math500_number_theory_l5",
+            "source": "MATH-500 Number Theory Level 5",
+            "prompt": "The proper divisors of 12 are 1, 2, 3, 4 and 6. A proper divisor of an integer N is a positive divisor of N that is less than N. What is the sum of the proper divisors of the sum of the proper divisors of 284?",
+            "verify": "text",
+            "check": lambda resp: "284" in resp,
         },
     ],
     # ── Classic reasoning/strategy puzzles ──────────────────────

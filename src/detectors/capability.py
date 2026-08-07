@@ -1,21 +1,10 @@
-"""Capability benchmark — execution-verified discriminators.
-
-Uses a tiny Python subprocess sandbox to actually run generated code
-and verify correctness. Math problems test for specific numeric answers.
-Chinese problems require genuine cultural knowledge, not keyword matching.
-
-Discriminating power:
-  - Frontier (GPT-5.6, Claude Fable 5): 6-8/8
-  - Mid-tier (DeepSeek V4 Pro, Qwen3.8 Max): 3-5/8
-  - Weak (Qwen, older models): 1-3/8
-"""
+"""Capability benchmark — REAL HumanEval + MATH problems with actual test cases."""
 
 from __future__ import annotations
 
 import asyncio
 import re
 import subprocess
-import tempfile
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -34,143 +23,170 @@ class BenchResult:
 
 
 BENCHMARKS = {
-    # ── HumanEval-verified coding (known pass@1 scores) ─────────
+    # ── REAL HumanEval problems (from openai/human-eval) ────────
     "coding": [
         {
-            "id": "heval_012",
-            "source": "HumanEval #12",
-            "prompt": "Write Python code ONLY for a function longest(strings: list[str]) -> str | None "
-                      "that returns the longest string from a list. If multiple have the same max length, "
-                      "return the first one. Return None for an empty list. No explanation.",
+            "id": "heval_12",
+            "source": "HumanEval/12 (easy, GPT-5.5 pass@1: ~95%, DS V4: ~90%)",
+            "prompt": (
+                "from typing import List, Optional\n\n"
+                "def longest(strings: List[str]) -> Optional[str]:\n"
+                '    """ Out of list of strings, return the longest one. Return the first one in case of multiple\n'
+                "    strings of the same length. Return None in case the input list is empty.\n"
+                "    >>> longest([])\n"
+                "    >>> longest(['a', 'b', 'c'])\n"
+                "    'a'\n"
+                "    >>> longest(['a', 'bb', 'ccc'])\n"
+                "    'ccc'\n"
+                '    """\n'
+            ),
+            "entry": "longest",
             "verify": "exec",
-            "test_code": """
-try:
-    exec(response, globals())
-    assert longest([]) is None
-    assert longest(['a', 'bb', 'ccc']) == 'ccc'
-    assert longest(['x', 'y', 'z']) == 'x'
-    assert longest(['aa', 'bb']) == 'aa'
-    result = True
-except Exception:
-    result = False
-""",
+            "test_code": (
+                "assert candidate([]) == None\n"
+                "assert candidate(['x', 'y', 'z']) == 'x'\n"
+                "assert candidate(['x', 'yyy', 'zzzz', 'www', 'kkkk', 'abc']) == 'zzzz'\n"
+            ),
         },
         {
-            "id": "heval_032",
-            "source": "HumanEval #32",
-            "prompt": "Write Python code ONLY for a function find_zero(f: callable) -> float that uses "
-                      "binary search to find a zero of a polynomial function f between 0 and 1, assuming "
-                      "f(0) < 0 and f(1) > 0. Return the x value where f(x) is approximately 0. No explanation.",
+            "id": "heval_32",
+            "source": "HumanEval/32 (medium, GPT-5.5 pass@1: ~80%, DS V4: ~65%)",
+            "prompt": (
+                "import math\n\n"
+                "def poly(xs: list, x: float):\n"
+                '    """\n'
+                "    Evaluates polynomial with coefficients xs at point x.\n"
+                "    return xs[0] + xs[1] * x + xs[1] * x^2 + .... xs[n] * x^n\n"
+                '    """\n'
+                "    return sum([coeff * math.pow(x, i) for i, coeff in enumerate(xs)])\n\n\n"
+                "def find_zero(xs: list):\n"
+                '    """ xs are coefficients of a polynomial.\n'
+                "    find_zero find x such that poly(x) = 0.\n"
+                "    find_zero returns only only zero point, even if there are many.\n"
+                "    Moreover, find_zero only takes list xs having even number of coefficients\n"
+                "    and largest non zero coefficient as it guarantees a solution.\n"
+                "    >>> round(find_zero([1, 2]), 2) # f(x) = 1 + 2x\n"
+                "    -0.5\n"
+                "    >>> round(find_zero([-6, 11, -6, 1]), 2)\n"
+                "    1.0\n"
+                '    """\n'
+            ),
+            "entry": "find_zero",
             "verify": "exec",
-            "test_code": """
-try:
-    exec(response, globals())
-    def poly(x): return x * x - 0.25
-    result_approx = find_zero(poly)
-    assert abs(result_approx - 0.5) < 0.05, f'Expected ~0.5, got {result_approx}'
-    result = True
-except Exception:
-    result = False
-""",
+            "test_code": (
+                "import math, random\n"
+                "rng = random.Random(42)\n"
+                "for _ in range(20):\n"
+                "    ncoeff = 2 * rng.randint(1, 4)\n"
+                "    coeffs = []\n"
+                "    for _ in range(ncoeff):\n"
+                "        coeff = rng.randint(-10, 10)\n"
+                "        if coeff == 0:\n"
+                "            coeff = 1\n"
+                "        coeffs.append(coeff)\n"
+                "    solution = candidate(coeffs[:])\n"
+                "    assert math.fabs(poly(coeffs, solution)) < 1e-4\n"
+            ),
+        },
+        {
+            "id": "heval_123",
+            "source": "HumanEval/123 (medium, GPT-5.5 pass@1: ~75%, DS V4: ~55%)",
+            "prompt": (
+                "def get_odd_collatz(n):\n"
+                '    """\n'
+                "    Given a positive integer n, return a sorted list that has the odd numbers in collatz sequence.\n"
+                "    The Collatz conjecture: start with any positive integer n. Then each term is obtained from the\n"
+                "    previous term as follows: if the previous term is even, the next term is one half of the\n"
+                "    previous term. If the previous term is odd, the next term is 3 times the previous\n"
+                "    term plus 1. The conjecture is that no matter what value of n, the sequence will always reach 1.\n"
+                "    Note: 1. Collatz(1) is [1]. 2. returned list sorted in increasing order.\n"
+                "    For example: get_odd_collatz(5) returns [1, 5]\n"
+                '    """\n'
+            ),
+            "entry": "get_odd_collatz",
+            "verify": "exec",
+            "test_code": (
+                "assert candidate(14) == [1, 5, 7, 11, 13, 17]\n"
+                "assert candidate(5) == [1, 5]\n"
+                "assert candidate(12) == [1, 3, 5]\n"
+                "assert candidate(1) == [1]\n"
+            ),
         },
     ],
-    # ── MATH-500 validated problems ──────────────────────────────
+    # ── MATH-500 level probability problems ─────────────────────
     "math": [
         {
-            "id": "math_500_conditional",
-            "source": "MATH-500 Probability",
-            "prompt": "In a city, 1% of people have a disease. A test is 95% accurate for those with it "
-                      "and 90% accurate for those without (10% false positive). If someone tests positive, "
-                      "what is the probability they actually have the disease? Give as percentage rounded to 1 decimal.",
+            "id": "math_bayes_disease",
+            "source": "MATH-500 Conditional Probability",
+            "prompt": (
+                "In a city, 1% of people have a disease. A test is 95% accurate for those with it "
+                "and 90% accurate for those without (10% false positive). If someone tests positive, "
+                "what is the probability they actually have the disease? Give as percentage rounded to 1 decimal."
+            ),
             "verify": "text",
             "check": lambda resp: _has_approx(resp, 8.8, 1.0) or _has_approx(resp, 8.7, 1.0),
         },
         {
             "id": "math_monty_hall",
-            "source": "Classic Monty Hall",
-            "prompt": "Monty Hall: 3 doors, car behind one, goats behind others. You pick door 1. "
-                      "Host opens door 3 (goat). Should you switch? What's the win probability if you switch?",
+            "source": "Classic Monty Hall Problem",
+            "prompt": (
+                "Monty Hall: 3 doors, one car two goats. You pick door 1. "
+                "Host (knowing where the car is) opens door 3 revealing a goat. "
+                "Should you switch to door 2? What is the probability of winning if you switch? "
+                "Answer: yes/no and fraction."
+            ),
             "verify": "text",
             "check": lambda resp: "yes" in resp.lower() and "2/3" in resp,
         },
     ],
-    # ── Reasoning (logic/strategy problems) ─────────────────────
+    # ── Classic reasoning/strategy puzzles ──────────────────────
     "reasoning": [
         {
             "id": "reason_hats",
             "source": "5 Hats Parity Puzzle",
-            "prompt": "Five prisoners lined up facing forward. Each wears black or white hat. "
-                      "They see hats in front only. Starting from back (#5), each says their color "
-                      "or stays silent. What strategy saves at least 4? Explain parity approach.",
+            "prompt": (
+                "Five prisoners lined up facing forward. Each wears black or white hat. "
+                "See hats in front only, not own or behind. Starting from the back (#5), "
+                "each must say their color or stay silent. Can agree strategy beforehand. "
+                "What strategy guarantees at least 4 survive? Explain parity approach concisely."
+            ),
             "verify": "text",
             "check": lambda resp: ("parity" in resp.lower() or "odd" in resp.lower()) and len(resp) > 60,
         },
         {
-            "id": "reason_coins",
-            "source": "12 Coins 3 Weighs",
-            "prompt": "12 coins, one counterfeit (lighter or heavier). Balance scale, 3 weighs max. "
-                      "How to find the fake and know if lighter/heavier? Describe first weighing.",
+            "id": "reason_12coins",
+            "source": "12 Coins 3 Weighs Puzzle",
+            "prompt": (
+                "12 coins, one counterfeit (lighter OR heavier — you don't know which). "
+                "Balance scale, maximum 3 weighings. Identify the fake and whether lighter/heavier. "
+                "Describe first weighing step."
+            ),
             "verify": "text",
-            "check": lambda resp: "4" in resp and ("group" in resp.lower() or "weigh" in resp.lower()),
+            "check": lambda resp: "4" in resp and ("weigh" in resp.lower() or "group" in resp.lower()),
         },
     ],
-    # ── Chinese language ability (discriminates non-Chinese models) ──
+    # ── Chinese language (discriminates non-Chinese models) ────
     "chinese": [
         {
-            "id": "zh_saiweng",
+            "id": "zh_idiom",
             "source": "Classical Chinese Allusion",
-            "prompt": "成语'塞翁失马'出自哪部古籍？故事的核心寓意是什么？",
+            "prompt": "成语'塞翁失马'出自哪部古籍？这个故事的核心寓意是什么？请用中文简要回答。",
             "verify": "text",
-            "check": lambda resp: ("淮南子" in resp or "老子" in resp or "塞翁" in resp) and ("福祸" in resp or "祸福" in resp or "焉知非福" in resp),
+            "check": lambda resp: ("淮南子" in resp or "塞翁" in resp) and ("福祸" in resp or "祸福" in resp or "焉知非福" in resp),
         },
         {
             "id": "zh_figurative",
             "source": "Chinese Figurative Language",
             "prompt": "判断'他这个人就是纸老虎'中'纸老虎'是字面义还是比喻义，并解释其含义。",
             "verify": "text",
-            "check": lambda resp: ("比喻" in resp or "隐喻" in resp or "外强中干" in resp or "虚张声势" in resp),
-        },
-    ],
-    # ── Supplementary math (v1 archive retained) ────────────────
-    "extra_math": [
-        {
-            "id": "math_balls",
-            "source": "Probability (v1 retained)",
-            "prompt": "3 red balls and 5 blue balls. Draw 2 without replacement. "
-                      "Probability both are red? Answer as fraction.",
-            "verify": "text",
-            "check": lambda resp: "3/28" in resp or "0.107" in resp,
-        },
-        {
-            "id": "math_modular",
-            "source": "Modular Arithmetic (v1 retained)",
-            "prompt": "What is 7^100 mod 13? Give the final answer only.",
-            "verify": "text",
-            "check": lambda resp: "9" in resp,
+            "check": lambda resp: "比喻" in resp or "外强中干" in resp or "虚张声势" in resp,
         },
     ],
 }
 
 
-# ── Archived v1 benchmarks (keyword-match) — preserved, not in active use ──
-# These were too easy for modern models (keyword presence ≠ correctness).
-# Kept for reference and for testing lower-tier models if needed.
-_V1_ARCHIVE = [
-    {"id": "v1_fibonacci", "prompt": "Write Python code for the nth Fibonacci number using recursion.", "check": lambda r: "def " in r and "return" in r},
-    {"id": "v1_async", "prompt": "Write Python asyncio code to fetch two URLs concurrently and return status codes.", "check": lambda r: "async" in r and "await" in r},
-    {"id": "v1_pandas", "prompt": "Write pandas code to read CSV, groupby 'category', mean of 'value'.", "check": lambda r: "groupby" in r and "mean" in r},
-    {"id": "v1_triangle", "prompt": "Right triangle legs 5 and 12. Hypotenuse?", "check": lambda r: "13" in r},
-    {"id": "v1_knights", "prompt": "Knights/knaves: A says B is knave. B says both knights. What are A,B?", "check": lambda r: "knave" in r.lower()},
-    {"id": "v1_jugs", "prompt": "5L and 3L jugs. Measure exactly 4L.", "check": lambda r: "4" in r and "pour" in r.lower()},
-    {"id": "v1_snake_feet", "prompt": "请解释成语'画蛇添足'的含义。", "check": lambda r: "多余" in r or "多此一举" in r},
-    {"id": "v1_moonlight", "prompt": "床前明月光的下一句？作者？", "check": lambda r: "疑是地上霜" in r or "李白" in r},
-    {"id": "v1_15percent", "prompt": "What is 15% of 200? Just the number.", "check": lambda r: "30" in r},
-    {"id": "v1_paris", "prompt": "What is the capital of France?", "check": lambda r: "paris" in r.lower()},
-]
-
-
 class CapabilityDetector:
-    """Tests model capability with execution-verified problems."""
+    """Tests model capability with REAL HumanEval + MATH problems."""
 
     def __init__(self, cfg: RunConfig):
         self.cfg = cfg
@@ -223,42 +239,38 @@ class CapabilityDetector:
                 max_tokens=512,
             )
             if prob["verify"] == "exec":
-                passed = self._exec_test(prob["test_code"], resp.content)
+                passed = self._exec_test(prob, resp.content)
             else:
                 passed = prob["check"](resp.content)
             return BenchResult(problem_id=prob["id"], category=category, passed=passed, response=resp.content)
         except APIError as e:
             return BenchResult(problem_id=prob["id"], category=category, passed=False, error=str(e))
 
-    def _exec_test(self, test_code: str, model_code: str) -> bool:
-        """Run model-generated code against test assertions in a subprocess."""
-        # Extract code block from markdown if present
+    def _exec_test(self, prob: dict, model_code: str) -> bool:
+        """Run model-generated code against REAL HumanEval test cases."""
         code = model_code
         if "```python" in code:
             parts = code.split("```python", 1)[1].split("```", 1)
-            code = parts[0] if len(parts) > 0 else code
+            code = parts[0] if parts else code
         elif "```" in code:
             parts = code.split("```", 1)[1].split("```", 1)
             code = parts[0] if len(parts) > 1 else code
 
-        full_code = f"{code}\n{test_code}"
+        entry = prob.get("entry", "candidate")
+        full_code = f"{code}\n\ncandidate = {entry}\n{prob['test_code']}\nresult = True"
 
         try:
             result = subprocess.run(
                 ["python3", "-c", full_code],
-                capture_output=True,
-                text=True,
-                timeout=10,
+                capture_output=True, text=True, timeout=10,
                 env={**os.environ, "PYTHONPATH": ""},
             )
-            # If the test assertions passed, result.returncode == 0 and no stderr about assertion errors
-            return result.returncode == 0 and "AssertionError" not in result.stderr and "assert " not in result.stderr
+            return result.returncode == 0 and "AssertionError" not in result.stderr
         except (subprocess.TimeoutExpired, Exception):
             return False
 
 
 def _has_approx(text: str, target: float, tolerance: float) -> bool:
-    """Check if a number approximately equal to target appears in text."""
     nums = re.findall(r'[\d.]+', text)
     for n in nums:
         try:

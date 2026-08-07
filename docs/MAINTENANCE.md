@@ -2,6 +2,17 @@
 
 > 行业快速发展，探针和参数数据会过期。本文档说明如何保持检测数据新鲜。
 
+## 数据来源速查
+
+| 数据 | 来源 | 更新频率 | 验证方式 |
+|------|------|----------|----------|
+| knowledge_probes | 自研 + llm-verify (MIT) | 新模型发布时 | 手动添加探针 |
+| HumanEval coding 题 | openai/human-eval (GitHub) | **永不变** (2021 发布) | 题目固定，无需更新 |
+| MATH-500 题 | HuggingFaceH4/MATH-500 | **永不变** (固定 benchmark) | `pip install datasets` 后重加载比对 |
+| API 参数指纹 | OpenRouter API `/v1/models` | 每月 | `python3 scripts/update_api_params.py check` |
+| 统计指纹库 | llm-fingerprint (npm) | 上游发布时 | `npm update -g llm-fingerprint` |
+| CC Switch schema | CC Switch 桌面应用 | 大版本更新时 | 手动检查 `discover_providers()` 是否返回 0 |
+
 ## 一、自动化检查（建议每月一次）
 
 ```bash

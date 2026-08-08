@@ -6,7 +6,8 @@
 
 | 数据 | 来源 | 更新频率 | 验证方式 |
 |------|------|----------|----------|
-| knowledge_probes | 自研 + llm-verify (MIT) | 新模型发布时 | 手动添加探针 |
+| knowledge_probes | 自研 + llm-verify (MIT) + OpenRouter 元数据 | 新模型发布时 | 添加穿帮探针组 |
+| knowledge 穿帮组 | Kimi/Qwen/GLM/Grok/MiniMax (OpenRouter 价格数据) | 新模型发布时 | 对照 OpenRouter API 验证定价 |
 | HumanEval coding 题 | openai/human-eval (GitHub) | **永不变** (2021 发布) | 题目固定，无需更新 |
 | MATH-500 题 | HuggingFaceH4/MATH-500 | **永不变** (固定 benchmark) | `pip install datasets` 后重加载比对 |
 | API 参数指纹 | OpenRouter API `/v1/models` | 每月 | `python3 scripts/update_api_params.py check` |

@@ -34,6 +34,9 @@ TRACKED_FAMILIES = {
     "anthropic/claude-opus-5": "claude",
     "moonshotai/kimi-k3": "kimi",
     "glm/glm-5.2": "glm",
+    "z-ai/glm-5.2": "glm",
+    "x-ai/grok-4.5": "grok",
+    "minimax/minimax-m3": "minimax",
 }
 
 

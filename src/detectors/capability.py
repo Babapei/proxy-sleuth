@@ -112,6 +112,63 @@ BENCHMARKS = {
                 "assert candidate(1) == [1]\n"
             ),
         },
+        {
+            "id": "heval_40",
+            "source": "HumanEval/40 (medium, GPT-5.5 pass@1: ~78%, DS V4: ~62%)",
+            "prompt": (
+                "def triples_sum_to_zero(l: list):\n"
+                '    """\n'
+                "    triples_sum_to_zero takes a list of integers as an input.\n"
+                "    it returns True if there are three distinct elements in the list that\n"
+                "    sum to zero, and False otherwise.\n"
+                "    >>> triples_sum_to_zero([1, 3, 5, 0])\n"
+                "    False\n"
+                "    >>> triples_sum_to_zero([1, 3, -2, 1])\n"
+                "    True\n"
+                "    >>> triples_sum_to_zero([1, 2, 3, 7])\n"
+                "    False\n"
+                "    >>> triples_sum_to_zero([1])\n"
+                "    False\n"
+                '    """\n'
+            ),
+            "entry": "triples_sum_to_zero",
+            "verify": "exec",
+            "test_code": (
+                "assert candidate([1, 3, 5, 0]) == False\n"
+                "assert candidate([1, 3, 5, -1]) == False\n"
+                "assert candidate([1, 3, -2, 1]) == True\n"
+                "assert candidate([1, 2, 3, 7]) == False\n"
+                "assert candidate([1, 2, 5, 7]) == False\n"
+                "assert candidate([2, 4, -5, 3, 9, 7]) == True\n"
+                "assert candidate([1]) == False\n"
+                "assert candidate([1, 3, 5, -100]) == False\n"
+                "assert candidate([100, 3, 5, -100]) == False\n"
+            ),
+        },
+        {
+            "id": "heval_65",
+            "source": "HumanEval/65 (medium, GPT-5.5 pass@1: ~72%, DS V4: ~55%)",
+            "prompt": (
+                "def circular_shift(x, shift):\n"
+                '    """Circular shift the digits of the integer x, shift the digits right by shift\n'
+                "    and return the result as a string.\n"
+                "    If shift > number of digits, return digits reversed.\n"
+                "    >>> circular_shift(12, 1)\n"
+                '    "21"\n'
+                "    >>> circular_shift(12, 2)\n"
+                '    "12"\n'
+                '    """\n'
+            ),
+            "entry": "circular_shift",
+            "verify": "exec",
+            "test_code": (
+                "assert candidate(100, 2) == '001'\n"
+                "assert candidate(12, 2) == '12'\n"
+                "assert candidate(97, 8) == '79'\n"
+                "assert candidate(12, 1) == '21'\n"
+                "assert candidate(11, 101) == '11'\n"
+            ),
+        },
     ],
     # ── REAL MATH-500 problems (from HuggingFaceH4/MATH-500) ────
     "math": [
@@ -135,6 +192,20 @@ BENCHMARKS = {
             "prompt": "The proper divisors of 12 are 1, 2, 3, 4 and 6. A proper divisor of an integer N is a positive divisor of N that is less than N. What is the sum of the proper divisors of the sum of the proper divisors of 284?",
             "verify": "text",
             "check": lambda resp: "284" in resp,
+        },
+        {
+            "id": "math500_prealgebra_l5",
+            "source": "MATH-500 Prealgebra Level 5",
+            "prompt": "The expression 2*3*4*5+1 is equal to 121, since multiplication is carried out before addition. However, we can obtain values other than 121 for this expression if we are allowed to change it by inserting parentheses. For example, we can obtain 144 by: (2*3)*(4*(5+1))=144. Including the trivial way, how many different values can be obtained for the expression 2*3*4*5+1 by inserting parentheses in all possible ways?",
+            "verify": "text",
+            "check": lambda resp: "4" in resp and not any(n in resp for n in ("14","24","34","40","41","42","43","44","45","46","47","48","49")),
+        },
+        {
+            "id": "math500_algebra_l3",
+            "source": "MATH-500 Intermediate Algebra Level 3",
+            "prompt": "Let a be a positive real number such that all the roots of x^3 + a*x^2 + a*x + 1 = 0 are real. Find the smallest possible value of a.",
+            "verify": "text",
+            "check": lambda resp: "3" in resp and not any(n in resp for n in ("13","23","30","31","32","33","34","35","36","37","38","39")),
         },
     ],
     # ── Classic reasoning/strategy puzzles ──────────────────────

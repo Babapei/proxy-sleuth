@@ -139,9 +139,20 @@ class KnowledgeProbeEngine:
             return "deepseek" in model and "v4" in model
         if group_name == "reverse":
             return True
-        # llm-verify groups: identity and capability probes work for ALL models
+        # llm-verify groups: identity and capability for all models
         if group_name.startswith("llm_verify_"):
             return True
+        # "self" groups: only the named model should know, others → suspicious if they do
+        if group_name == "kimi_self":
+            return "kimi" in model
+        if group_name == "qwen_self":
+            return "qwen" in model
+        if group_name == "glm_self":
+            return "glm" in model
+        if group_name == "grok_self":
+            return "grok" in model
+        if group_name == "minimax_self":
+            return "minimax" in model
         return False
 
     def _variant(self, question: str, attempt: int) -> str:

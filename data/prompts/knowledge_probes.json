@@ -176,6 +176,96 @@
           "weight": 0.5
         }
       ]
+    },
+    "kimi_self": {
+      "description": "Kimi K3 internal details (穿帮: knows Kimi internals while claiming GPT)",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "kimi_k3_params",
+          "question": "Kimi K3 from Moonshot AI: what is its parameter count and is it open-weight?",
+          "keywords": ["2.8", "trillion", "open", "weight", "kimi"],
+          "weight": 1.0
+        },
+        {
+          "id": "kimi_k3_reasoning",
+          "question": "Is Kimi K3's reasoning mode mandatory or optional? What effort levels does it support?",
+          "keywords": ["mandatory", "reasoning", "kimi", "effort"],
+          "weight": 0.8
+        }
+      ]
+    },
+    "qwen_self": {
+      "description": "Qwen 3.8 Max internal details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "qwen38_multimodal",
+          "question": "Qwen 3.8 Max supports which input modalities beyond text?",
+          "keywords": ["image", "video", "qwen", "multimodal"],
+          "weight": 0.7
+        },
+        {
+          "id": "qwen38_pricing",
+          "question": "What is the per-million-token pricing for Qwen 3.8 Max?",
+          "keywords": ["2", "6", "qwen", "dollar"],
+          "weight": 0.7
+        }
+      ]
+    },
+    "glm_self": {
+      "description": "GLM-5.2 internal details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "glm52_batch",
+          "question": "GLM-5.2 from Z.ai: is it available in batch mode? What's the batch pricing?",
+          "keywords": ["batch", "z.ai", "glm", "free"],
+          "weight": 0.8
+        },
+        {
+          "id": "glm52_params",
+          "question": "Which unique sampling parameters does GLM-5.2 support that DeepSeek V4 also supports?",
+          "keywords": ["min_p", "top_a", "glm"],
+          "weight": 0.7
+        }
+      ]
+    },
+    "grok_self": {
+      "description": "Grok 4.5 internal details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "grok45_context",
+          "question": "What is the maximum context length of Grok 4.5 from xAI?",
+          "keywords": ["500", "thousand", "grok", "xai"],
+          "weight": 0.7
+        },
+        {
+          "id": "grok45_pricing",
+          "question": "What is the per-million-token pricing for xAI's Grok 4.5?",
+          "keywords": ["2", "6", "grok", "million"],
+          "weight": 0.7
+        }
+      ]
+    },
+    "minimax_self": {
+      "description": "MiniMax M3 internal details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "minimax_m3_input",
+          "question": "MiniMax M3 supports which input modalities besides text?",
+          "keywords": ["image", "video", "minimax", "multimodal"],
+          "weight": 0.7
+        },
+        {
+          "id": "minimax_pricing",
+          "question": "What is the pricing for MiniMax M3 per million tokens?",
+          "keywords": ["free", "dollar", "minimax"],
+          "weight": 0.6
+        }
+      ]
     }
   }
 }

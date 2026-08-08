@@ -122,7 +122,8 @@ class TerminalReporter:
                 else:
                     detail = "Full context preserved"
             elif layer.get("layer") == "api_features":
-                detail = f"Best guess: {layer.get('best_model_guess', 'unknown')}"
+                excluded = layer.get("excluded_families", [])
+                detail = f"Excluded: {', '.join(excluded)}" if excluded else "No exclusions"
             elif layer.get("layer") == "knowledge_probes":
                 detail = f"Groups: {len(layer.get('groups', []))}"
             elif layer.get("layer") == "statistical":

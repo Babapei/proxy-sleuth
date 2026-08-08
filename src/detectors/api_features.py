@@ -1,8 +1,12 @@
-"""API feature detection — identifies model via protocol-level characteristics.
+"""API feature detection — identifies model family via protocol-level signals.
 
-Checks: unique API parameters (min_p, top_a: DeepSeek-only),
-Programmatic Tool Calling, Anthropic compatibility, tool call format,
-streaming format, reasoning effort support.
+Based on OpenRouter metadata analysis (338 models, Aug 2026):
+  - Anthropic uniquely HAS: verbosity
+  - Anthropic notably LACKS: frequency_penalty, presence_penalty, seed, min_p, logprobs
+  - OpenAI uniquely HAS: web_search_options, prediction
+  - Cohere notably LACKS: reasoning_effort, logprobs, min_p, logit_bias
+  - DeepSeek/Qwen/Kimi/GLM/Gemini/Grok: shared param profiles (can't distinguish)
+  - This layer is an EXCLUDER, not a confirmer.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ class FeatureResult:
     feature: str
     detected: bool
     detail: str
-    model_hint: str = ""
+    model_hint: str = ""  # now used for "excludes" detection
 
 
 class APIFeaturesDetector:
@@ -38,33 +42,77 @@ class APIFeaturesDetector:
     async def run(self) -> dict[str, Any]:
         features: list[FeatureResult] = []
 
-        # Parameter fingerprinting — the only reliable API-level signals
-        features.append(await self._check_min_p())              # DeepSeek-exclusive
-        features.append(await self._check_top_a())              # DeepSeek-exclusive
-        features.append(await self._check_include_reasoning())  # DeepSeek/Qwen vs GPT/Claude
-        features.append(await self._check_anthropic_compat())   # Claude/DeepSeek vs GPT
-        features.append(await self._check_tool_call_format())   # Tool call presence
-        features.append(await self._check_stream_format())      # Streaming capability
+        features.append(await self._check_min_p())              # absent → Anthropic/Cohere/Grok
+        features.append(await self._check_frequency_penalty())  # rejected → Anthropic
+        features.append(await self._check_seed())               # rejected → Anthropic
+        features.append(await self._check_top_a())              # accepted → DeepSeek/GLM/Gemini
+        features.append(await self._check_anthropic_compat())   # accepted → Claude/DeepSeek
+        features.append(await self._check_tool_call_format())   # tool call presence
 
-        detected = sum(1 for f in features if f.detected)
-        hints: dict[str, int] = {}
-        for f in features:
-            if f.model_hint:
-                hints[f.model_hint] = hints.get(f.model_hint, 0) + 1
-        best_guess = max(hints, key=hints.get) if hints else "unknown"
+        # Build excluded families list
+        excluded = set()
+        # If min_p is rejected → not DeepSeek, not Qwen
+        min_p_result = _find_feature(features, "min_p")
+        if min_p_result and not min_p_result.detected:
+            excluded.update(["gpt", "claude"])  # Anthropic/GPT don't support min_p → expected rejection
+        # If frequency_penalty is rejected → Anthropic signature
+        fp_result = _find_feature(features, "frequency_penalty")
+        if fp_result and not fp_result.detected:
+            excluded.add("anthropic-claude")  # Only Anthropic rejects it
+        # If seed is rejected → Anthropic
+        seed_result = _find_feature(features, "seed")
+        if seed_result and not seed_result.detected:
+            excluded.add("anthropic-claude")
+        # If top_a is accepted → not GPT, not Anthropic
+        ta_result = _find_feature(features, "top_a")
+        if ta_result and ta_result.detected:
+            excluded.update(["gpt", "anthropic-claude"])
 
         return {
             "layer": "api_features",
-            "score": round(detected / len(features), 3) if features else 0,
-            "verdict": "MATCH" if best_guess in self.cfg.model.lower() else "INCONCLUSIVE",
-            "best_model_guess": best_guess,
+            "detected": sum(1 for f in features if f.detected),
+            "total_checks": len(features),
+            "score": _score_from_features(features, self.cfg.model),
+            "verdict": "MATCH" if excluded else "INCONCLUSIVE",
+            "excluded_families": sorted(excluded) if excluded else [],
             "features": [
                 {"feature": f.feature, "detected": f.detected, "detail": f.detail, "model_hint": f.model_hint}
                 for f in features
             ],
         }
 
-    # ── new: parameter-based fingerprint (Aug 2026) ──────────────
+    # ── new: Anthropic absence-based fingerprint ─────────────────
+
+    async def _check_frequency_penalty(self) -> FeatureResult:
+        """frequency_penalty is rejected by Anthropic — strong exclusion signal."""
+        try:
+            resp = await self.client.chat(
+                messages=[{"role": "user", "content": "say ok"}],
+                model=self.cfg.model, temperature=0.0, max_tokens=10,
+                extra_body={"frequency_penalty": 0.5},
+            )
+            return FeatureResult(feature="frequency_penalty", detected=True, detail="Accepted (not Anthropic)", model_hint="not-anthropic")
+        except APIError as e:
+            if _is_unknown_param_error(e.message, "frequency_penalty"):
+                return FeatureResult(feature="frequency_penalty", detected=False, detail="Rejected — Anthropic signature!", model_hint="anthropic")
+            return FeatureResult(feature="frequency_penalty", detected=True, detail="Accepted", model_hint="not-anthropic")
+
+    async def _check_seed(self) -> FeatureResult:
+        """seed is rejected by Anthropic."""
+        try:
+            resp = await self.client.chat(
+                messages=[{"role": "user", "content": "say ok"}],
+                model=self.cfg.model, temperature=0.0, max_tokens=10,
+                extra_body={"seed": 42},
+            )
+            return FeatureResult(feature="seed", detected=True, detail="Accepted (not Anthropic)", model_hint="not-anthropic")
+        except APIError as e:
+            if _is_unknown_param_error(e.message, "seed"):
+                return FeatureResult(feature="seed", detected=False, detail="Rejected — Anthropic signature!", model_hint="anthropic")
+            return FeatureResult(feature="seed", detected=True, detail="Accepted", model_hint="not-anthropic")
+
+    # ── original: param fingerprinting ──────────────────────────
+
 
     async def _check_min_p(self) -> FeatureResult:
         """min_p is exclusive to DeepSeek V4 — not supported by GPT or Claude."""
@@ -93,20 +141,6 @@ class APIFeaturesDetector:
             if _is_unknown_param_error(e.message, "top_a"):
                 return FeatureResult(feature="top_a", detected=False, detail="top_a rejected (not DeepSeek)", model_hint="gpt-5.x/claude")
             return FeatureResult(feature="top_a", detected=True, detail=f"Accepted", model_hint="deepseek")
-
-    async def _check_include_reasoning(self) -> FeatureResult:
-        """include_reasoning is supported by DeepSeek V4 and Qwen, not GPT/Claude."""
-        try:
-            resp = await self.client.chat(
-                messages=[{"role": "user", "content": "1+1=?"}],
-                model=self.cfg.model, temperature=0.0, max_tokens=50,
-                extra_body={"include_reasoning": True},
-            )
-            return FeatureResult(feature="include_reasoning", detected=True, detail="include_reasoning accepted — DeepSeek or Qwen.", model_hint="deepseek/qwen")
-        except APIError as e:
-            if _is_unknown_param_error(e.message, "include_reasoning"):
-                return FeatureResult(feature="include_reasoning", detected=False, detail="include_reasoning rejected (likely GPT/Claude)", model_hint="gpt-5.x/claude")
-            return FeatureResult(feature="include_reasoning", detected=True, detail=f"Accepted", model_hint="deepseek/qwen")
 
     # ── anthropic compat ────────────────────────────────────────
 
@@ -171,36 +205,35 @@ class APIFeaturesDetector:
         except APIError:
             return FeatureResult(feature="tool_call_format", detected=False, detail="Tool calling not supported.", model_hint="")
 
-    async def _check_stream_format(self) -> FeatureResult:
-        """Check streaming SSE format characteristics."""
-        try:
-            chunks: list[str] = []
-            async for chunk in self.client.chat_stream(
-                messages=[{"role": "user", "content": "Count from 1 to 5."}],
-                model=self.cfg.model,
-                temperature=0.0,
-                max_tokens=100,
-            ):
-                chunks.append(chunk.content)
-                if chunk.finish_reason:
-                    break
-
-            if chunks:
-                return FeatureResult(feature="stream_format", detected=True, detail=f"Streaming works, received {len(chunks)} chunks.", model_hint="")
-            return FeatureResult(feature="stream_format", detected=False, detail="No streaming chunks received.", model_hint="")
-        except APIError:
-            return FeatureResult(feature="stream_format", detected=False, detail="Streaming not supported.", model_hint="")
-
 
 def _is_unknown_param_error(error_msg: str, param_name: str) -> bool:
-    """Detect 'unknown parameter' errors across different API error formats.
-
-    OpenAI: "Unknown parameter: 'min_p'"
-    Anthropic: "Unrecognized request argument: min_p"
-    Generic: "Invalid parameter", "additional properties", etc.
-    """
+    """Detect 'unknown parameter' errors across different API error formats."""
     msg = error_msg.lower()
     if param_name in msg:
-        if any(w in msg for w in ("unknown", "unrecognized", "invalid", "unexpected", "not supported", "not allowed", "additional properties")):
-            return True
+        return any(w in msg for w in ("unknown", "unrecognized", "invalid", "unexpected", "not supported", "not allowed", "additional properties"))
     return False
+
+
+def _score_from_features(features: list, claimed_model: str) -> float:
+    """Score: claims GPT but Anthropic signature present → MISMATCH (low score).
+    Claims Claude but min_p works → MISMATCH (low score). Otherwise neutral."""
+    model = claimed_model.lower()
+    penalty = 0.0
+    for f in features:
+        if f.feature == "frequency_penalty" and not f.detected:
+            if "gpt" in model or "deepseek" in model:
+                penalty += 0.3  # Anthropic signature on non-Claude model
+        if f.feature == "min_p" and f.detected:
+            if "claude" in model or "fable" in model or "opus" in model:
+                penalty += 0.3  # min_p on Claude model
+        if f.feature == "top_a" and f.detected:
+            if "gpt" in model:
+                penalty += 0.2
+    return max(0.0, 1.0 - penalty)
+
+
+def _find_feature(features: list, name: str) -> Any:
+    for f in features:
+        if f.feature == name:
+            return f
+    return None

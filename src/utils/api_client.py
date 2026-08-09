@@ -14,6 +14,7 @@ import httpx
 class Protocol(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    RESPONSES = "responses"
 
 
 @dataclass
@@ -110,6 +111,8 @@ class APIClient:
         )
         if self.protocol == Protocol.ANTHROPIC:
             return await self._anthropic_chat(body)
+        if self.protocol == Protocol.RESPONSES:
+            return await self._responses_chat(messages, model, temperature, max_tokens, tools, extra_body)
         return await self._openai_chat(body)
 
     async def chat_stream(
@@ -195,7 +198,58 @@ class APIClient:
                     raise
                 await asyncio.sleep(2 ** attempt)
 
-    # ── internal: Anthropic ─────────────────────────────────────
+    # ── internal: OpenAI Responses API ───────────────────────────
+
+    def _responses_url(self) -> str:
+        return f"{self.base_url}/responses"
+
+    async def _responses_chat(
+        self, messages: list, model: str, temperature: float,
+        max_tokens: int, tools: list | None, extra_body: dict | None,
+    ) -> ChatResponse:
+        """OpenAI Responses API format (native Codex CLI protocol)."""
+        t0 = asyncio.get_event_loop().time()
+        input_msgs = [{"role": m["role"], "content": m["content"]} for m in messages]
+        body: dict[str, Any] = {
+            "model": model, "input": input_msgs,
+            "max_output_tokens": max_tokens,
+        }
+        if tools:
+            body["tools"] = tools
+        if extra_body:
+            body.update(extra_body)
+
+        for attempt in range(self.max_retries):
+            try:
+                async with self._client() as client:
+                    resp = await client.post(self._responses_url(), json=body)
+                    data = resp.json()
+                    if resp.status_code >= 400:
+                        raise APIError(resp.status_code, _extract_error(data), data)
+                    output = data.get("output", [])
+                    text = ""
+                    for item in output:
+                        if item.get("type") == "message":
+                            for content in item.get("content", []):
+                                if content.get("type") == "output_text":
+                                    text += content.get("text", "")
+                    usage = data.get("usage", {})
+                    return ChatResponse(
+                        content=text, model=data.get("model", model),
+                        finish_reason=data.get("status", "completed"),
+                        usage=TokenUsage.from_dict({
+                            "prompt_tokens": usage.get("input_tokens", 0),
+                            "completion_tokens": usage.get("output_tokens", 0),
+                            "total_tokens": usage.get("total_tokens", 0),
+                        }),
+                        raw=data,
+                        duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
+                    )
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                if attempt == self.max_retries - 1:
+                    raise APIError(0, f"Connection failed: {e}") from e
+                await asyncio.sleep(2 ** attempt)
+        raise APIError(0, "Unexpected")
 
     def _anthropic_url(self) -> str:
         if "/v1" in self.base_url:

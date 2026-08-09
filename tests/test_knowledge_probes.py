@@ -69,7 +69,7 @@ class TestKnowledgeProbeEngine:
         assert result["layer"] == "knowledge_probes"
         assert "overall_score" in result
         assert "verdict" in result
-        assert len(result["groups"]) == 11  # +5 new self groups
+        assert len(result["groups"]) == 15  # all probe groups
 
     @pytest.mark.asyncio
     async def test_mismatch_on_ignorant_model(self, engine):

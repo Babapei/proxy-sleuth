@@ -153,6 +153,14 @@ class KnowledgeProbeEngine:
             return "grok" in model
         if group_name == "minimax_self":
             return "minimax" in model
+        if group_name == "gemini_self":
+            return "gemini" in model
+        if group_name == "mistral_self":
+            return "mistral" in model
+        if group_name == "llama_self":
+            return "llama" in model
+        if group_name == "hunyuan_self":
+            return "hunyuan" in model or "tencent" in model
         return False
 
     def _variant(self, question: str, attempt: int) -> str:

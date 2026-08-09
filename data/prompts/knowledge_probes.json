@@ -266,6 +266,78 @@
           "weight": 0.6
         }
       ]
+    },
+    "gemini_self": {
+      "description": "Gemini 3.1 specific details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "gemini31_flash_free",
+          "question": "Google's Gemini Flash 3.1 on OpenRouter: what is its prompt pricing?",
+          "keywords": ["free", "zero", "gemini", "flash"],
+          "weight": 0.7
+        },
+        {
+          "id": "gemini31_multimodal",
+          "question": "What makes Gemini 3.1 Pro different from the Flash variant in terms of image capabilities?",
+          "keywords": ["image", "generation", "pro", "gemini", "visual"],
+          "weight": 0.7
+        }
+      ]
+    },
+    "mistral_self": {
+      "description": "Mistral Large specific details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "mistral_large_context",
+          "question": "What is the context window size of Mistral Large?",
+          "keywords": ["128", "thousand", "mistral", "context"],
+          "weight": 0.7
+        },
+        {
+          "id": "mistral_large_params",
+          "question": "Which penalty parameters does Mistral Large support that Anthropic does not?",
+          "keywords": ["frequency_penalty", "presence_penalty", "mistral"],
+          "weight": 0.6
+        }
+      ]
+    },
+    "llama_self": {
+      "description": "Meta Llama 4 specific details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "llama4_maverick_free",
+          "question": "On OpenRouter, is Llama 4 Maverick free or paid? What's its prompt price?",
+          "keywords": ["free", "zero", "llama", "meta"],
+          "weight": 0.7
+        },
+        {
+          "id": "llama4_unique_params",
+          "question": "Which sampling parameters does Llama 4 support that GPT models typically don't?",
+          "keywords": ["min_p", "logit_bias", "llama", "sampling"],
+          "weight": 0.6
+        }
+      ]
+    },
+    "hunyuan_self": {
+      "description": "Tencent Hunyuan specific details",
+      "source": "OpenRouter (Aug 2026)",
+      "probes": [
+        {
+          "id": "hunyuan_pricing",
+          "question": "What is the pricing for Tencent's Hunyuan A13B model on OpenRouter?",
+          "keywords": ["free", "zero", "hunyuan", "tencent"],
+          "weight": 0.7
+        },
+        {
+          "id": "hunyuan_context",
+          "question": "What is the context length of Hunyuan A13B?",
+          "keywords": ["131", "thousand", "hunyuan", "context"],
+          "weight": 0.6
+        }
+      ]
     }
   }
 }

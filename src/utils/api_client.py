@@ -17,6 +17,8 @@ class Protocol(Enum):
     RESPONSES = "responses"
     GEMINI = "gemini"
     COHERE = "cohere"
+    AZURE = "azure"
+    OLLAMA = "ollama"
 
 
 @dataclass
@@ -119,6 +121,10 @@ class APIClient:
             return await self._gemini_chat(messages, model, temperature, max_tokens)
         if self.protocol == Protocol.COHERE:
             return await self._cohere_chat(messages, model, temperature, max_tokens)
+        if self.protocol == Protocol.AZURE:
+            return await self._azure_chat(body)
+        if self.protocol == Protocol.OLLAMA:
+            return await self._ollama_chat(messages, model, temperature, max_tokens)
         return await self._openai_chat(body)
 
     async def chat_stream(
@@ -349,6 +355,83 @@ class APIClient:
                             "total_tokens": billed.get("input_tokens", 0) + billed.get("output_tokens", 0),
                         }),
                         raw=data, duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
+                    )
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                if attempt == self.max_retries - 1:
+                    raise APIError(0, f"Connection failed: {e}") from e
+                await asyncio.sleep(2 ** attempt)
+        raise APIError(0, "Unexpected")
+
+    # ── internal: Azure OpenAI ───────────────────────────────────
+
+    async def _azure_chat(self, body: dict) -> ChatResponse:
+        """Azure OpenAI format — same body, different URL + auth."""
+        t0 = asyncio.get_event_loop().time()
+        model = body.get("model", "")
+        # Azure URL: /openai/deployments/{deployment}/chat/completions?api-version=2024-10-21
+        base = self.base_url.rstrip("/")
+        if "openai.azure.com" in base:
+            url = f"{base}/openai/deployments/{model}/chat/completions?api-version=2024-10-21"
+        else:
+            url = f"{base}/chat/completions"
+
+        headers = {"api-key": self.api_key, "Content-Type": "application/json"}
+
+        for attempt in range(self.max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout), headers=headers) as client:
+                    resp = await client.post(url, json=body)
+                    data = resp.json()
+                    if resp.status_code >= 400:
+                        raise APIError(resp.status_code, _extract_error(data), data)
+                    choice = data["choices"][0]
+                    return ChatResponse(
+                        content=choice["message"].get("content") or "",
+                        model=data.get("model", model),
+                        finish_reason=choice.get("finish_reason", "stop"),
+                        usage=TokenUsage.from_dict(data.get("usage", {})),
+                        raw=data,
+                        duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
+                    )
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                if attempt == self.max_retries - 1:
+                    raise APIError(0, f"Connection failed: {e}") from e
+                await asyncio.sleep(2 ** attempt)
+        raise APIError(0, "Unexpected")
+
+    # ── internal: Ollama Native ──────────────────────────────────
+
+    async def _ollama_chat(
+        self, messages: list, model: str, temperature: float, max_tokens: int,
+    ) -> ChatResponse:
+        """Ollama native /api/chat format."""
+        t0 = asyncio.get_event_loop().time()
+        url = f"{self.base_url.rstrip('/')}/api/chat"
+        body = {
+            "model": model,
+            "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+            "stream": False,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        for attempt in range(self.max_retries):
+            try:
+                async with self._client() as client:
+                    resp = await client.post(url, json=body)
+                    data = resp.json()
+                    if resp.status_code >= 400:
+                        raise APIError(resp.status_code, _extract_error(data), data)
+                    msg = data.get("message", {})
+                    return ChatResponse(
+                        content=msg.get("content", ""),
+                        model=data.get("model", model),
+                        finish_reason="stop" if data.get("done") else "incomplete",
+                        usage=TokenUsage.from_dict({
+                            "prompt_tokens": data.get("prompt_eval_count", 0),
+                            "completion_tokens": data.get("eval_count", 0),
+                            "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+                        }),
+                        raw=data,
+                        duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
                     )
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 if attempt == self.max_retries - 1:

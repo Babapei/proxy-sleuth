@@ -15,6 +15,7 @@ class Protocol(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     RESPONSES = "responses"
+    GEMINI = "gemini"
 
 
 @dataclass
@@ -113,6 +114,8 @@ class APIClient:
             return await self._anthropic_chat(body)
         if self.protocol == Protocol.RESPONSES:
             return await self._responses_chat(messages, model, temperature, max_tokens, tools, extra_body)
+        if self.protocol == Protocol.GEMINI:
+            return await self._gemini_chat(messages, model, temperature, max_tokens)
         return await self._openai_chat(body)
 
     async def chat_stream(
@@ -250,6 +253,63 @@ class APIClient:
                     raise APIError(0, f"Connection failed: {e}") from e
                 await asyncio.sleep(2 ** attempt)
         raise APIError(0, "Unexpected")
+
+    # ── internal: Google Gemini ──────────────────────────────────
+
+    async def _gemini_chat(
+        self, messages: list, model: str, temperature: float, max_tokens: int,
+    ) -> ChatResponse:
+        """Google Gemini generateContent API."""
+        t0 = asyncio.get_event_loop().time()
+
+        contents = []
+        for m in messages:
+            role = "user" if m["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": m.get("content", "")}]})
+
+        base = self.base_url.rstrip("/")
+        url = f"{base}/v1beta/models/{model}:generateContent"
+
+        # Google official uses ?key= query param; proxies use Bearer auth
+        if "generativelanguage.googleapis.com" in base:
+            url += f"?key={self.api_key}"
+            headers = {"Content-Type": "application/json"}
+        else:
+            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+        body = {
+            "contents": contents,
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+        }
+
+        for attempt in range(self.max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout), headers=headers) as client:
+                    resp = await client.post(url, json=body)
+                    data = resp.json()
+                    if resp.status_code >= 400:
+                        raise APIError(resp.status_code, _extract_error(data), data)
+                    candidates = data.get("candidates", [{}])
+                    parts = candidates[0].get("content", {}).get("parts", [{}])
+                    text = "".join(p.get("text", "") for p in parts)
+                    usage = data.get("usageMetadata", {})
+                    return ChatResponse(
+                        content=text, model=model,
+                        finish_reason=candidates[0].get("finishReason", "STOP"),
+                        usage=TokenUsage.from_dict({
+                            "prompt_tokens": usage.get("promptTokenCount", 0),
+                            "completion_tokens": usage.get("candidatesTokenCount", 0),
+                            "total_tokens": usage.get("totalTokenCount", 0),
+                        }),
+                        raw=data, duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
+                    )
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                if attempt == self.max_retries - 1:
+                    raise APIError(0, f"Connection failed: {e}") from e
+                await asyncio.sleep(2 ** attempt)
+        raise APIError(0, "Unexpected")
+
+    # ── internal: Anthropic Messages ────────────────────────────
 
     def _anthropic_url(self) -> str:
         if "/v1" in self.base_url:

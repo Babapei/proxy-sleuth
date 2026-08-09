@@ -16,6 +16,7 @@ class Protocol(Enum):
     ANTHROPIC = "anthropic"
     RESPONSES = "responses"
     GEMINI = "gemini"
+    COHERE = "cohere"
 
 
 @dataclass
@@ -116,6 +117,8 @@ class APIClient:
             return await self._responses_chat(messages, model, temperature, max_tokens, tools, extra_body)
         if self.protocol == Protocol.GEMINI:
             return await self._gemini_chat(messages, model, temperature, max_tokens)
+        if self.protocol == Protocol.COHERE:
+            return await self._cohere_chat(messages, model, temperature, max_tokens)
         return await self._openai_chat(body)
 
     async def chat_stream(
@@ -300,6 +303,50 @@ class APIClient:
                             "prompt_tokens": usage.get("promptTokenCount", 0),
                             "completion_tokens": usage.get("candidatesTokenCount", 0),
                             "total_tokens": usage.get("totalTokenCount", 0),
+                        }),
+                        raw=data, duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
+                    )
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                if attempt == self.max_retries - 1:
+                    raise APIError(0, f"Connection failed: {e}") from e
+                await asyncio.sleep(2 ** attempt)
+        raise APIError(0, "Unexpected")
+
+    # ── internal: Cohere Chat v2 ─────────────────────────────────
+
+    async def _cohere_chat(
+        self, messages: list, model: str, temperature: float, max_tokens: int,
+    ) -> ChatResponse:
+        """Cohere Chat v2 API."""
+        t0 = asyncio.get_event_loop().time()
+        url = f"{self.base_url.rstrip('/')}/v2/chat"
+        body = {
+            "model": model,
+            "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        for attempt in range(self.max_retries):
+            try:
+                async with self._client() as client:
+                    resp = await client.post(url, json=body)
+                    data = resp.json()
+                    if resp.status_code >= 400:
+                        raise APIError(resp.status_code, _extract_error(data), data)
+                    msg = data.get("message", {})
+                    content_list = msg.get("content", [])
+                    text = "".join(
+                        c.get("text", "") for c in content_list if c.get("type") == "text"
+                    )
+                    usage = data.get("usage", {})
+                    billed = usage.get("billed_units", usage)
+                    return ChatResponse(
+                        content=text, model=model,
+                        finish_reason=data.get("finish_reason", "COMPLETE"),
+                        usage=TokenUsage.from_dict({
+                            "prompt_tokens": billed.get("input_tokens", 0),
+                            "completion_tokens": billed.get("output_tokens", 0),
+                            "total_tokens": billed.get("input_tokens", 0) + billed.get("output_tokens", 0),
                         }),
                         raw=data, duration_ms=(asyncio.get_event_loop().time() - t0) * 1000,
                     )

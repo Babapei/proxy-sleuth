@@ -26,7 +26,7 @@ def cli() -> None:
 @click.option("--endpoint", "-e", required=True, help="API endpoint URL (e.g. https://proxy.example.com/v1)")
 @click.option("--api-key", "-k", envvar="PROXY_SLEUTH_KEY", help="API key (or set PROXY_SLEUTH_KEY env var)")
 @click.option("--model", "-m", required=True, help="Claimed model name (e.g. gpt-5.6-sol, claude-fable-5)")
-@click.option("--protocol", "-p", type=click.Choice(["openai", "anthropic", "responses", "gemini"]), default="openai", help="API protocol")
+@click.option("--protocol", "-p", type=click.Choice(["openai", "anthropic", "responses", "gemini", "cohere"]), default="openai", help="API protocol")
 @click.option("--mode", type=click.Choice(["quick", "standard", "full", "knowledge", "params", "context", "routing", "features", "fingerprint", "capability"]), default="quick", help="Detection mode")
 @click.option("--output", "-o", "output_format", type=click.Choice(["term", "json", "html"]), default="term", help="Output format")
 @click.option("--output-file", help="Save report to file")

@@ -10,9 +10,13 @@ A: It doesn't identify with 100% certainty. It runs 7 independent detection laye
 
 A: In theory, yes. A proxy that serves the EXACT claimed model with unmodified parameters, no context truncation, and no routing — would pass everything. But such a proxy has no economic incentive to exist (it would cost the same as the official API). The proxies we're designed to catch are the ones that profit from substitution.
 
-**Q: Does proxy-sleuth work with Claude Code / Codex CLI proxies?**
+**Q: Does proxy-sleuth work with Claude Code / Codex CLI / Gemini CLI proxies?**
 
-A: Yes, for OpenAI-format proxies. Anthropic-format (Claude native) support exists in the API client but hasn't been tested against live Claude Code proxies yet.
+A: Yes. 7 protocols supported: `--protocol openai` (default, most common), `--protocol anthropic` (Claude), `--protocol responses` (Codex), `--protocol gemini`, `--protocol cohere`, `--protocol azure`, `--protocol ollama`. Pick the one matching the proxy's provider group.
+
+**Q: How do I know which protocol to use?**
+
+A: Match the proxy's provider group: Claude group → `anthropic`, Codex group → `responses`, Gemini group → `gemini`, Azure group → `azure`. Most domestic Chinese models (Kimi, Qwen, GLM, etc.) use `openai`. When in doubt, try `openai` first — it's the universal default.
 
 **Q: Why does the fingerprint layer show "NOT_AVAILABLE"?**
 
@@ -26,7 +30,7 @@ A: It's a weighted average of all 7 layers' individual scores, mapped to 0-100%.
 
 **Q: Why does the scan take so long?**
 
-A: `--mode full` sends ~350 API requests. The knowledge probes alone are 24 questions × 3 repeats = 72 requests. The statistical fingerprint is 60-200 single-token probes. Complex capability problems can take 20+ seconds each. Use `--mode quick` for ~1 minute, `--mode full` for ~5-10 minutes.
+A: `--mode full` sends ~350 API requests. Knowledge probes are 40+ questions × 3 repeats = 120+ requests. Statistical fingerprint runs 30-60 single-token probes. Complex capability problems can take 20+ seconds each. Use `--mode quick` for ~1 minute, `--mode full` for ~5-10 minutes.
 
 **Q: Can I test multiple endpoints at once?**
 
@@ -50,7 +54,7 @@ A: Use `-k <key>` or set `PROXY_SLEUTH_KEY` env var. CC Switch users: the key is
 
 **Q: Capability layer says 0% or errors?**
 
-A: The execution-verified benchmarks run generated code in a subprocess. Some models output malformed code or markdown wrappers that confuse the extraction. This is expected — it's part of the discrimination.
+A: The coding benchmarks run generated code in a subprocess sandbox (real HumanEval + MATH-500 problems). Models outputting malformed code or markdown wrappers will fail execution. This is expected discrimination — frontier models succeed, weaker ones don't.
 
 **Q: Knowledge probes show very low scores for my genuine model?**
 

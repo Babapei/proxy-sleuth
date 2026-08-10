@@ -19,19 +19,19 @@ proxy-sleuth/
 │   │   ├── scorer.py            # Weighted multi-layer scoring
 │   │   └── reporter.py          # Rich terminal output
 │   └── utils/
-│       ├── api_client.py        # OpenAI + Anthropic dual-protocol HTTP client
+│       ├── api_client.py        # 7-protocol HTTP client (OpenAI/Anthropic/Responses/Gemini/Cohere/Azure/Ollama)
 │       └── cccswitch.py         # CC Switch SQLite reader
 ├── data/
 │   └── prompts/
-│       └── knowledge_probes.json # 24 probes: timestamp + llm-verify
+│       └── knowledge_probes.json # 40+ probes across 15 groups
 ├── vendor/fingerprint/           # Bundled llm-fingerprint (176 models)
 ├── scripts/
 │   └── update_api_params.py     # Auto-check API parameter freshness
 ├── docs/
+│   ├── DESIGN.md                 # Complete design document
 │   ├── MAINTENANCE.md            # Data freshness guide
-│   └── ARCHITECTURE.md           # This file
-├── DESIGN.md                     # Complete design document
-└── README.md
+│   ├── ARCHITECTURE.md           # This file
+│   └── FAQ.md
 ```
 
 ## How a Detection Run Works
@@ -85,4 +85,4 @@ class YourDetector:
 - **Each layer MUST have a valid premise in current industry conditions.** Before adding a layer, ask: does this detection signal still work in August 2026? In January 2027?
 - **False positives are worse than false negatives.** A layer that cries wolf undermines the entire tool. Prefer layers with well-understood error rates (like statistical fingerprint) over heuristic ones.
 - **No layer is perfect on its own.** The 7-layer framework exists because no single method catches everything. Cross-verification is the whole point.
-- **Data freshness matters.** Time-sensitive layers (knowledge probes, API features, capability) degrade without maintenance. See [MAINTENANCE.md](MAINTENANCE.md).
+- **Data freshness matters.** Time-sensitive layers (knowledge probes, API features) degrade without maintenance. Statistical fingerprint needs periodic DB updates. Capability (HumanEval+MATH-500) and context truncation are static. See [MAINTENANCE.md](MAINTENANCE.md).

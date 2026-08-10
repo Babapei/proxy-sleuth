@@ -33,7 +33,7 @@ proxy-sleuth cccswitch test
 | **param-integrity** | max_tokens reduction, reasoning downgrade, temperature locking, tool stripping, system prompt injection | quick+ |
 | **context** | Context truncation via Needle-in-Haystack (~25K tokens, 200 rounds of realistic dialogue) | standard+ |
 | **api-features** | DeepSeek-exclusive params (min_p, top_a), Anthropic compat, tool calling, streaming | quick+ |
-| **knowledge** | 24 probes: timestamp events + llm-verify identity/capability forensic prompts | quick+ |
+| **knowledge** | 40+ probes across 15 groups: timestamp events +穿帮 + llm-verify | quick+ |
 | **fingerprint** | Statistical fingerprint — 176-model database (Jensen-Shannon divergence) | quick+ |
 | **capability** | Execution-verified coding/math/reasoning/Chinese benchmarks with subprocess sandbox | full |
 | **routing** | Mixed routing detection: quality inversion + fact inversion (3× repetition) | full |

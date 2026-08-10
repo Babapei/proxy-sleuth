@@ -6,8 +6,8 @@
 
 | 数据 | 来源 | 更新频率 | 验证方式 |
 |------|------|----------|----------|
-| knowledge_probes | 自研 + llm-verify (MIT) + OpenRouter 元数据 | 新模型发布时 | 添加穿帮探针组 |
-| knowledge 穿帮组 | Kimi/Qwen/GLM/Grok/MiniMax (OpenRouter 价格数据) | 新模型发布时 | 对照 OpenRouter API 验证定价 |
+| knowledge_probes | 15 组 40+ 道探针（自研 + llm-verify + OpenRouter） | 新模型发布时 | 添加穿帮探针组 |
+| 穿帮探针组 | GPT/Claude/DeepSeek/Kimi/Qwen/GLM/Grok/MiniMax/Gemini/Mistral/Llama/Hunyuan | 新模型发布时 | 对照 OpenRouter API 验证定价 |
 | HumanEval coding 题 | openai/human-eval (GitHub) | **永不变** (2021 发布) | 题目固定，无需更新 |
 | MATH-500 题 | HuggingFaceH4/MATH-500 | **永不变** (固定 benchmark) | `pip install datasets` 后重加载比对 |
 | API 参数指纹 | OpenRouter API `/v1/models` | 每月 | `python3 scripts/update_api_params.py check` |
@@ -26,30 +26,15 @@ npm update -g llm-fingerprint                  # 统计指纹库更新
 
 ## 二、新模型发布 → 手动更新
 
-当 OpenAI、Anthropic、DeepSeek、阿里等发布新的大模型版本时，需要更新三处：
+当新的大模型版本发布时，更新两处：
 
 ### 2.1 添加知识边界探针
 
-编辑 `data/prompts/knowledge_probes.json`：
+编辑 `data/prompts/knowledge_probes.json`，添加新模型的穿帮探针组。
 
-```json
-{
-  "新组名": {
-    "description": "新模型的发布时间/定价/独有功能",
-    "target_date_range": "2026-08 ~ 2026-09",
-    "probes": [
-      {
-        "id": "新模型ID",
-        "question": "针对发布时间/定价/独有功能的问题",
-        "keywords": ["关键词1", "关键词2"],
-        "weight": 1.0
-      }
-    ]
-  }
-}
-```
+现有 15 组：GPT/Claude/DeepSeek/Kimi/Qwen/GLM/Grok/MiniMax/Gemini/Mistral/Llama/Hunyuan + llm-verify + reverse。
 
-同时在 `src/detectors/knowledge_probes.py` 的 `_should_model_know` 方法中添加新组名匹配。
+然后在 `src/detectors/knowledge_probes.py` 的 `_should_model_know` 中加匹配规则。
 
 ### 2.2 更新 API 特征检测
 

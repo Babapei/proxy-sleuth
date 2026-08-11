@@ -4,6 +4,8 @@
 
 **proxy-sleuth** is a CLI tool that verifies whether an LLM API proxy is really serving the model it claims. 7-layer forensic analysis: knowledge probes, statistical fingerprinting, API parameter fingerprints, execution-verified benchmarks, and more.
 
+![demo](assets/demo.png)
+
 ## Quick Start
 
 ```bash

@@ -96,6 +96,24 @@ class APIClient:
 
     # ── public API ──────────────────────────────────────────────
 
+    async def list_models(self) -> list[str]:
+        """List available models from the endpoint (GET /v1/models).
+
+        Returns a list of model IDs. Empty list if the endpoint doesn't
+        support model listing or returns an error.
+        """
+        url = f"{self.base_url}/models"
+        try:
+            async with self._client() as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return []
+                data = resp.json()
+                models = data.get("data", [])
+                return [m.get("id", "") for m in models if isinstance(m, dict)]
+        except Exception:
+            return []
+
     async def chat(
         self,
         messages: list[dict[str, Any]],

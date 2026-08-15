@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from typing import Optional
 
@@ -33,6 +34,7 @@ def cli() -> None:
 @click.option("--timeout", type=float, default=120.0, help="Request timeout in seconds")
 @click.option("--temperature", type=float, default=0.0, help="Sampling temperature for probes")
 @click.option("--max-tokens", type=int, default=1024, help="Max tokens for probe responses")
+@click.option("--list-models", is_flag=True, help="List available models from the endpoint (GET /v1/models) instead of detecting")
 def detect(
     endpoint: str,
     api_key: Optional[str],
@@ -44,12 +46,18 @@ def detect(
     timeout: float,
     temperature: float,
     max_tokens: int,
+    list_models: bool,
 ) -> None:
     """Run model authenticity detection against an API endpoint.
 
     For cccswitch users: run 'proxy-sleuth cccswitch test' to
     auto-discover and test your currently active provider.
     """
+    # List models mode
+    if list_models:
+        asyncio.run(_list_models(endpoint, api_key, protocol, timeout))
+        return
+
     if not api_key:
         click.echo("Error: No API key provided. Use --api-key or set PROXY_SLEUTH_KEY env var.", err=True)
         click.echo("Tip: if using cccswitch, try 'proxy-sleuth cccswitch test' instead.", err=True)
@@ -165,6 +173,24 @@ def cccswitch_test(mode: str, output_format: str) -> None:
     click.echo(f"\n{'='*60}")
     click.echo("Done. All cccswitch providers tested.")
     click.echo(f"{'='*60}")
+
+
+async def _list_models(endpoint: str, api_key: Optional[str], protocol: str, timeout: float) -> None:
+    """List available models from an endpoint."""
+    from src.utils.api_client import APIClient
+
+    key = api_key or os.environ.get("PROXY_SLEUTH_KEY", "")
+    client = APIClient(endpoint, key, protocol=protocol, timeout=timeout)
+    models = await client.list_models()
+
+    if not models:
+        click.echo("No models returned. The endpoint may not support /v1/models listing.")
+        click.echo("(This is common for proxy services that hide their model list.)")
+        return
+
+    click.echo(f"Found {len(models)} model(s):")
+    for m in models:
+        click.echo(f"  {m}")
 
 
 def _apply_mode_preset(cfg: RunConfig, mode: str) -> None:

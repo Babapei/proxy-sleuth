@@ -22,6 +22,18 @@ A: Match the proxy's provider group: Claude group → `anthropic`, Codex group �
 
 A: It requires Node.js. Install with `brew install node` or similar. The vendored copy at `vendor/fingerprint/` works without npm, but Node must be available. If Node is installed and it still fails, run `node vendor/fingerprint/bin/fp.js list` once to bootstrap the 176-model database.
 
+**Q: How do I identify the actual model (not just detect mismatch)?**
+
+A: Use `--identify`: `proxy-sleuth detect -e <URL> -m <claimed> -k <key> --identify`. It matches the endpoint against the 176-model fingerprint database and reports the closest match with Jensen-Shannon divergence.
+
+**Q: How do I list the models a proxy offers?**
+
+A: `proxy-sleuth detect -e <URL> -k <key> --list-models` calls `GET /v1/models`. Note: many proxies hide their model list (return empty) — this is common and itself a signal.
+
+**Q: What are baseline fingerprints for?**
+
+A: When a new model releases but the 176-model fingerprint DB hasn't been updated, you can collect its genuine fingerprint yourself: `proxy-sleuth baseline collect -e <official-API> -m <model> -k <key>`. View collected ones with `proxy-sleuth baseline list`.
+
 ## Scoring & Verdicts
 
 **Q: What does "overall score 55%" mean?**

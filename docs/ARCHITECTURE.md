@@ -22,8 +22,9 @@ proxy-sleuth/
 │       ├── api_client.py        # 7-protocol HTTP client (OpenAI/Anthropic/Responses/Gemini/Cohere/Azure/Ollama)
 │       └── cccswitch.py         # CC Switch SQLite reader
 ├── data/
-│   └── prompts/
-│       └── knowledge_probes.json # 40+ probes across 15 groups
+│   ├── prompts/
+│   │   └── knowledge_probes.json # 40+ probes across 15 groups
+│   └── baselines/                 # Collected fingerprint snapshots (baseline collect)
 ├── vendor/fingerprint/           # Bundled llm-fingerprint (176 models)
 ├── scripts/
 │   └── update_api_params.py     # Auto-check API parameter freshness
@@ -32,6 +33,24 @@ proxy-sleuth/
 │   ├── MAINTENANCE.md            # Data freshness guide
 │   ├── ARCHITECTURE.md           # This file
 │   └── FAQ.md
+```
+
+## CLI Commands
+
+```bash
+# Main detection
+proxy-sleuth detect -e <URL> -m <MODEL> -k <KEY> [--mode full] [-p <protocol>]
+
+# Special modes
+proxy-sleuth detect ... --list-models   # List models the endpoint offers (GET /v1/models)
+proxy-sleuth detect ... --identify      # Identify which model it actually serves (176-DB match)
+
+# CC Switch auto-discovery
+proxy-sleuth cccswitch test             # Test all CC Switch-configured providers
+
+# Baseline fingerprints (for new models not yet in DB)
+proxy-sleuth baseline collect -e <official-API> -m <model> -k <key>
+proxy-sleuth baseline list
 ```
 
 ## How a Detection Run Works

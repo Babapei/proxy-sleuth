@@ -31,7 +31,7 @@ npm update -g llm-fingerprint                  # 统计指纹库更新
 
 ### 2.1 添加知识边界探针
 
-编辑 `data/prompts/knowledge_probes.json`，添加新模型的穿帮探针组。
+编辑 `src/data/prompts/knowledge_probes.json`，添加新模型的穿帮探针组。
 
 现有 15 组：GPT/Claude/DeepSeek/Kimi/Qwen/GLM/Grok/MiniMax/Gemini/Mistral/Llama/Hunyuan + llm-verify + reverse。
 

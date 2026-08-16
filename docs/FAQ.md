@@ -20,7 +20,7 @@ A: Match the proxy's provider group: Claude group â†’ `anthropic`, Codex group â
 
 **Q: Why does the fingerprint layer show "NOT_AVAILABLE"?**
 
-A: It requires Node.js. Install with `brew install node` or similar. The vendored copy at `vendor/fingerprint/` works without npm, but Node must be available. If Node is installed and it still fails, run `node vendor/fingerprint/bin/fp.js list` once to bootstrap the 176-model database.
+A: It requires Node.js. Install with `brew install node` or similar. The vendored copy at `src/vendor/fingerprint/` (inside the package) works without npm, but Node must be available. If Node is installed and it still fails, run `node src/vendor/fingerprint/bin/fp.js list` once to bootstrap the 176-model database.
 
 **Q: How do I identify the actual model (not just detect mismatch)?**
 

@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_FILE = PROJECT_ROOT / "data" / "api_params_cache.json"
+DATA_FILE = Path.home() / ".proxy-sleuth" / "api_params_cache.json"
 
 # Parameters known to be model-specific fingerprints
 FINGERPRINT_PARAMS = [

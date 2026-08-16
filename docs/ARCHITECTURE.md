@@ -21,11 +21,10 @@ proxy-sleuth/
 │   └── utils/
 │       ├── api_client.py        # 7-protocol HTTP client (OpenAI/Anthropic/Responses/Gemini/Cohere/Azure/Ollama)
 │       └── cccswitch.py         # CC Switch SQLite reader
-├── data/
-│   ├── prompts/
-│   │   └── knowledge_probes.json # 40+ probes across 15 groups
-│   └── baselines/                 # Collected fingerprint snapshots (baseline collect)
-├── vendor/fingerprint/           # Bundled llm-fingerprint (176 models)
+│   ├── data/
+│   │   └── prompts/
+│   │       └── knowledge_probes.json # 40+ probes across 15 groups
+│   └── vendor/fingerprint/           # Bundled llm-fingerprint (176 models, package data)
 ├── scripts/
 │   └── update_api_params.py     # Auto-check API parameter freshness
 ├── docs/

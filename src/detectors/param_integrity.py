@@ -7,7 +7,6 @@ locking, tool definition stripping, and system prompt injection.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import secrets
 from dataclasses import dataclass, field
 from typing import Any

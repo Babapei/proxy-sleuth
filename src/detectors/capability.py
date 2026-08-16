@@ -337,14 +337,3 @@ class CapabilityDetector:
             return result.returncode == 0 and "AssertionError" not in result.stderr
         except (subprocess.TimeoutExpired, Exception):
             return False
-
-
-def _has_approx(text: str, target: float, tolerance: float) -> bool:
-    nums = re.findall(r'[\d.]+', text)
-    for n in nums:
-        try:
-            if abs(float(n) - target) <= tolerance:
-                return True
-        except ValueError:
-            continue
-    return False

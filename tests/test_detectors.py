@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from src.config import RunConfig
-from src.detectors.capability import CapabilityDetector, _has_approx
+from src.detectors.capability import CapabilityDetector
 from src.detectors.mixed_routing import MixedRoutingDetector
 from src.utils.api_client import ChatResponse, TokenUsage
 
@@ -19,11 +19,6 @@ def _cfg():
 
 
 class TestCapability:
-    def test_has_approx(self):
-        assert _has_approx("answer is 8.8%", 8.8, 1.0)
-        assert _has_approx("about 9 percent", 8.8, 1.0)
-        assert not _has_approx("answer is 50", 8.8, 1.0)
-
     @pytest.mark.asyncio
     async def test_all_correct(self):
         detector = CapabilityDetector(_cfg())

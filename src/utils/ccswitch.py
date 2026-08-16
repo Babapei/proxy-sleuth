@@ -19,12 +19,6 @@ DB_SEARCH_PATHS = [
     Path.home() / "Library" / "Application Support" / "com.ccswitch.desktop" / "cc-switch.db",
 ]
 
-SETTINGS_SEARCH = [
-    Path.home() / ".cc-switch" / "settings.json",
-    Path.home() / ".claude" / "settings.json",
-    Path.home() / ".codex" / "config.toml",
-]
-
 
 @dataclass
 class Provider:

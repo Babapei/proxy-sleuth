@@ -35,6 +35,7 @@ def cli() -> None:
 @click.option("--temperature", type=float, default=0.0, help="Sampling temperature for probes")
 @click.option("--max-tokens", type=int, default=1024, help="Max tokens for probe responses")
 @click.option("--list-models", is_flag=True, help="List available models from the endpoint (GET /v1/models) instead of detecting")
+@click.option("--identify", is_flag=True, help="Identify which model this endpoint actually serves (matches against 176-model fingerprint DB)")
 def detect(
     endpoint: str,
     api_key: Optional[str],
@@ -47,12 +48,26 @@ def detect(
     temperature: float,
     max_tokens: int,
     list_models: bool,
+    identify: bool,
 ) -> None:
     """Run model authenticity detection against an API endpoint.
 
     For cccswitch users: run 'proxy-sleuth cccswitch test' to
     auto-discover and test your currently active provider.
     """
+    # Identify mode
+    if identify:
+        if not model:
+            click.echo("Error: --identify requires -m <model> (the model name to probe as).", err=True)
+            sys.exit(1)
+        key = api_key or os.environ.get("PROXY_SLEUTH_KEY", "")
+        if not key:
+            click.echo("Error: No API key provided.", err=True)
+            sys.exit(1)
+        cfg = RunConfig(endpoint=endpoint.rstrip("/"), api_key=key, model=model, protocol=protocol, timeout=timeout)
+        asyncio.run(_run_identify(cfg))
+        return
+
     # List models mode
     if list_models:
         asyncio.run(_list_models(endpoint, api_key, protocol, timeout))
@@ -187,15 +202,19 @@ def cccswitch_test(mode: str, output_format: str) -> None:
     Reads ~/.claude/settings.json to find what API endpoint Claude Code
     is currently pointed at, then runs detection against it.
     """
-    from src.utils.ccswitch import discover_providers, get_current_provider
+    from src.utils.ccswitch import discover_providers, get_current_provider, get_proxy_port
 
     providers = discover_providers()
 
     if not providers:
         click.echo("No cccswitch-managed configs found.")
-        click.echo("  Looked for: ~/.claude/settings.json, ~/.codex/config.*")
+        click.echo("  Looked for: ~/.cc-switch/cc-switch.db and related paths.")
         click.echo("  Make sure cccswitch is installed and configured first.")
         sys.exit(1)
+
+    port = get_proxy_port()
+    if port:
+        click.echo(f"CC Switch local proxy: 127.0.0.1:{port}")
 
     current = get_current_provider()
     click.echo(f"Found {len(providers)} cccswitch-managed provider(s):")
@@ -231,8 +250,43 @@ def cccswitch_test(mode: str, output_format: str) -> None:
     click.echo(f"{'='*60}")
 
 
+async def _run_identify(cfg: RunConfig) -> None:
+    """Identify which model an endpoint serves via fingerprint matching."""
+    from src.detectors.statistical import StatisticalFingerprinter
+
+    click.echo(f"Identifying model behind {cfg.endpoint} ...")
+    click.echo(f"  Probed as: {cfg.model}")
+    click.echo()
+
+    fp = StatisticalFingerprinter(cfg)
+    result = await fp.match_model()
+
+    if result.get("verdict") == "NOT_AVAILABLE":
+        click.echo(f"Error: {result.get('error', 'fingerprinting unavailable')}", err=True)
+        return
+
+    top = result.get("top_matches", [])
+    if not top:
+        click.echo("No close matches found in the 176-model database.")
+        return
+
+    click.echo("Top matches (lower JSD = closer):")
+    click.echo(f"  {'Model':<40s} {'JSD':>8s}")
+    click.echo(f"  {'-'*40} {'-'*8}")
+    for m in top:
+        click.echo(f"  {m['model']:<40s} {m['jsd']:>8.4f}")
+
+    best = top[0]
+    click.echo()
+    if best["jsd"] < 0.25:
+        click.echo(f"[green]Strong match: this endpoint likely serves {best['model']}[/green]")
+    elif best["jsd"] < 0.35:
+        click.echo(f"[yellow]Uncertain: closest is {best['model']} but not a strong match[/yellow]")
+    else:
+        click.echo(f"[red]No close match — this model is not in the 176-model database[/red]")
+
+
 async def _list_models(endpoint: str, api_key: Optional[str], protocol: str, timeout: float) -> None:
-    """List available models from an endpoint."""
     from src.utils.api_client import APIClient
 
     key = api_key or os.environ.get("PROXY_SLEUTH_KEY", "")

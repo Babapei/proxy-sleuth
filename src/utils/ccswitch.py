@@ -159,6 +159,9 @@ def _read_providers(conn: sqlite3.Connection) -> list[Provider]:
 
         endpoints = _read_endpoints(conn, pid)
 
+        # Extract default model from config TOML (e.g. model = "gpt-5.5")
+        models = _extract_models(config, app_type)
+
         providers.append(Provider(
             name=name or "unknown",
             base_url=base_url or (endpoints[0] if endpoints else ""),
@@ -167,10 +170,25 @@ def _read_providers(conn: sqlite3.Connection) -> list[Provider]:
             provider_id=pid,
             is_current=is_current,
             endpoints=endpoints,
+            models=models,
             source=str(_find_db() or ""),
         ))
 
     return providers
+
+
+def _extract_models(config: dict, app_type: str) -> list[str]:
+    """Extract default model name(s) from CC Switch config."""
+    toml = config.get("config", "")
+    models = re.findall(r'^model\s*=\s*"([^"]+)"', toml, re.M)
+    if models:
+        return models
+    # Fallback: check env vars for Claude
+    if app_type == "claude":
+        env = config.get("env", {})
+        model = env.get("ANTHROPIC_MODEL", "")
+        return [model] if model else []
+    return []
 
 
 def _read_endpoints(conn: sqlite3.Connection, provider_id: str) -> list[str]:

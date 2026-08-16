@@ -2,7 +2,7 @@
 name = "proxy-sleuth"
 version = "0.1.0"
 description = "Detect fake LLM APIs — multi-layer verification to catch proxy services substituting cheaper models"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 license = {text = "MIT"}
 readme = "README.md"
 authors = [
@@ -13,6 +13,9 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]

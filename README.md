@@ -28,6 +28,16 @@ proxy-sleuth detect \
 proxy-sleuth cccswitch test
 ```
 
+### Baseline fingerprints (for new models)
+
+```bash
+# Collect a genuine fingerprint when a model is too new for the DB
+proxy-sleuth baseline collect -e https://api.openai.com/v1 -m gpt-5.7 -k sk-xxx
+
+# List collected baselines
+proxy-sleuth baseline list
+```
+
 ## Detection Layers
 
 | Layer | What it detects | Mode |

@@ -12,6 +12,7 @@
 | MATH-500 题 | HuggingFaceH4/MATH-500 | **永不变** (固定 benchmark) | `pip install datasets` 后重加载比对 |
 | API 参数指纹 | OpenRouter API `/v1/models` | 每月 | `python3 scripts/update_api_params.py check` |
 | 统计指纹库 | llm-fingerprint (npm) | 上游发布时 | `npm update -g llm-fingerprint` |
+| 新模型临时指纹 | `baseline collect` 采集 | 新模型发布、库未更新时 | `proxy-sleuth baseline collect -e <官方API> -m <模型> -k <key>` |
 | CC Switch schema | CC Switch 桌面应用 | 大版本更新时 | 手动检查 `discover_providers()` 是否返回 0 |
 
 ## 一、自动化检查（建议每月一次）

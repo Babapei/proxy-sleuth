@@ -99,29 +99,81 @@ def baseline() -> None:
 @click.option("--api-key", "-k", required=True, envvar="PROXY_SLEUTH_KEY")
 @click.option("--model", "-m", required=True)
 @click.option("--protocol", "-p", type=click.Choice(["openai", "anthropic"]), default="openai")
-def baseline_collect(endpoint: str, api_key: str, model: str, protocol: str) -> None:
-    """Collect a baseline fingerprint from a trusted endpoint."""
+@click.option("--reps", type=int, default=16, help="Sampling repetitions (higher = more accurate, slower)")
+def baseline_collect(endpoint: str, api_key: str, model: str, protocol: str, reps: int) -> None:
+    """Collect a baseline fingerprint from a trusted endpoint.
+
+    Runs the statistical fingerprint probe against a known-genuine
+    endpoint and saves the resulting fingerprint to data/baselines/.
+    Use this when a new model is released but the fingerprint DB
+    hasn't been updated yet.
+    """
+    from src.utils.api_client import APIClient, Protocol
+    from src.utils.ccswitch import Provider
+    import src.detectors.statistical as stat
+
     click.echo(f"Collecting baseline for {model} from {endpoint} ...")
-    click.echo("(Not yet implemented — coming in Phase 3)")
+
+    async def _collect():
+        fp = stat.StatisticalFingerprinter.__new__(stat.StatisticalFingerprinter)
+        fp.cfg = RunConfig(endpoint=endpoint, api_key=api_key, model=model, protocol=protocol)
+        fp._node = None
+        fp._ready = None
+        if not await fp._ensure_ready():
+            click.echo("Error: Node.js not available for fingerprinting.", err=True)
+            return 1
+
+        code, out, err = await fp._fp(
+            "probe", endpoint, api_key, model,
+            "--api", "openai" if protocol == "openai" else "anthropic",
+            "--reps", str(reps),
+        )
+        if code != 0:
+            click.echo(f"Probe failed: {err[:300] if err else out[:300]}", err=True)
+            return 1
+
+        # fp probe saves result.json to its user data dir; parse the path
+        import re as _re
+        m = _re.search(r"Saved to (.+?\.json)", out)
+        if not m:
+            click.echo("Probe ran but could not locate saved result.json.", err=True)
+            click.echo(out[-500:])
+            return 1
+
+        src_path = m.group(1).strip()
+        from pathlib import Path
+        from src.config import BASELINES_DIR
+        BASELINES_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = model.replace("/", "-").replace(":", "-")
+        dest = BASELINES_DIR / f"{safe_name}.json"
+        Path(src_path).replace(dest)
+        click.echo(f"Baseline saved: {dest}")
+        return 0
+
+    import sys as _sys
+    _sys.exit(asyncio.run(_collect()))
 
 
 @baseline.command("list")
 def baseline_list() -> None:
     """List available baseline fingerprints."""
+    from src.config import BASELINES_DIR
+    files = sorted(BASELINES_DIR.glob("*.json")) if BASELINES_DIR.exists() else []
+    if not files:
+        click.echo("No baselines collected yet.")
+        click.echo("Run: proxy-sleuth baseline collect -e <official-api> -m <model> -k <key>")
+        return
     click.echo("Available baselines:")
-    click.echo("  (No baselines collected yet. Run 'proxy-sleuth baseline collect' first.)")
-
-
-@cli.group()
-def cccswitch() -> None:
-    """Manage cccswitch-compatible provider configs."""
+    for f in files:
+        size = f.stat().st_size
+        click.echo(f"  {f.stem}  ({size} bytes)")
 
 
 @cli.group()
 def cccswitch() -> None:
     """Auto-detect and test providers configured via cccswitch.
 
-    Reads directly from ~/.claude/settings.json and related config
+    Reads directly from ~/.cc-switch/cc-switch.db and related config
     files that cccswitch manages. No manual config needed.
     """
 

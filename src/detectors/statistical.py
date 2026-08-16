@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.config import PROJECT_ROOT, RunConfig
+from src.config import VENDOR_DIR, RunConfig
 
-FP_BIN = PROJECT_ROOT / "vendor" / "fingerprint" / "bin" / "fp.js"
+FP_BIN = VENDOR_DIR / "bin" / "fp.js"
 
 
 @dataclass

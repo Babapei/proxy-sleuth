@@ -38,7 +38,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = {find = {where = ["src"]}}
+packages = ["src", "src.analyzers", "src.detectors", "src.utils"]
+
+[tool.setuptools.package-data]
+src = ["data/prompts/*.json", "vendor/fingerprint/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

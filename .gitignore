@@ -33,11 +33,6 @@ session*.md
 dev-notes*.md
 TODO*.md
 
-# Baseline 数据（运行时采集，体积大）
-data/baselines/*.pkl
-data/baselines/*.json
-!data/baselines/.gitkeep
-
 # API keys and secrets
 .env
 *.secret
@@ -51,3 +46,8 @@ coverage.xml
 
 hf_cache/
 tmp/
+
+# PyPI build artifacts
+*.egg-info/
+dist/
+build/

@@ -9,10 +9,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.config import PROJECT_ROOT, RunConfig
+from src.config import PROMPTS_DIR, RunConfig
 from src.utils.api_client import APIClient, ChatResponse, APIError
 
-PROBES_PATH = PROJECT_ROOT / "data" / "prompts" / "knowledge_probes.json"
+PROBES_PATH = PROMPTS_DIR / "knowledge_probes.json"
 
 
 @dataclass

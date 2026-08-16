@@ -6,10 +6,14 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-PROMPTS_DIR = DATA_DIR / "prompts"
-BASELINES_DIR = DATA_DIR / "baselines"
+# Package directory (src/) — static data ships inside the package
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROMPTS_DIR = PACKAGE_DIR / "data" / "prompts"
+VENDOR_DIR = PACKAGE_DIR / "vendor" / "fingerprint"
+
+# User data — runtime-generated, stored in home directory
+USER_DATA_DIR = Path.home() / ".proxy-sleuth"
+BASELINES_DIR = USER_DATA_DIR / "baselines"
 
 
 @dataclass

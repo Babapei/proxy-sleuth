@@ -1,12 +1,12 @@
 [project]
-name = "llm-proxy-detector"
+name = "proxy-sleuth"
 version = "0.1.0"
 description = "Detect fake LLM APIs — multi-layer verification to catch proxy services substituting cheaper models"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 readme = "README.md"
 authors = [
-    {name = "llm-proxy-detector contributors"}
+    {name = "proxy-sleuth contributors"}
 ]
 keywords = ["llm", "api", "proxy", "detection", "fingerprinting", "fraud-detection"]
 classifiers = [
@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-llm-detect = "src.main:cli"
+proxy-sleuth = "src.main:cli"
 
 [build-system]
 requires = ["setuptools>=68"]
